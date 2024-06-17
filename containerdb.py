@@ -61,6 +61,13 @@ class MongoDB():
 		else :
 			return 0
 
+	def deleteUser(self, userid : str) -> int:
+		if not self.containers.find_one({"_id":userid}): return -1 # -1 Failed because no such record exists
+		else :
+			self.containers.delete_one({"_id":userid})
+			return 0
+
+
 	def isUserBan(self, userid : str) -> Optional[bool]:
 
 		return self.containers.find_one({"_id" : userid})["isUserBanned"]
