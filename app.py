@@ -3,14 +3,14 @@ from time import sleep
 from nextcord.ext import commands
 from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents
 from nextcord.ui import View, Button, Select
-import json,sys, os
+import sys, database
 
 GID = [1221327905456656404]
-
+COMMAND_PREFIX = "$"
 TOKEN = sys.argv[1]
 intents = Intents.default()
 intents.message_content = True
-bot = commands.Bot(intents=intents)
+bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
 @bot.slash_command(guild_ids=GID, description="Register Yourself!")
 async def register_for_thrill(interaction: Interaction):
@@ -49,6 +49,25 @@ async def challenge_start(interaction: Interaction, challengeid : str):
         embed = Embed(color=0xe02222, title="Failure", description="Something went wrong, please try again later...")
         await interaction.response.send_message(embed=embed)
 
+@bot.slash_command(guild_ids=GID, description="Stop a challenge.")
+async def challenge_stop(interaction:Interaction, challengeid : str) :
+    if not database.isChallengeStarted(interaction.user.id, challengeid) :
+        embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
+        await interaction.response.send_message(embed=embed)
+    database.closeChallenge(interaction.user.id, challengeid)
+    embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
+
+@bot.slash_command(guild_ids=GID, description="Check your Active Challenges!")
+async def challenges_active(interaction:Interaction):
+    activeChallenges = database.getActiveChallenges(interaction.user.id)
+    if activeChallenges : 
+        description = "Here you go:- \n"
+        description += "\n".join(activeChallenges)
+    else:
+        description = "No active challenges"
+    embed = Embed(color=0xB3D9FF, title="Active Challenges", description=description)
+    return await interaction.response.send_message(embed=embed)
+
 @bot.slash_command(guild_ids=GID, description="Submit Flag!")
 async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
@@ -68,6 +87,53 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
         embed = Embed(color=0xe02222, title="Sorry!", description="Incorrect Flag, please try again!")
         await message.edit(embed=embed)
 
+@bot.command(name="ban_user")
+async def ban_user(ctx, userid : int):
+    response = database.ban_user(userid)
+    if response is True:
+        embed = Embed(color=0xB3D9FF, title="Banned!", description=f"User with uid {userid} is now banned.")
+        await ctx.send(embed=embed)
+    else:
+        embed = Embed(color=0xB3D9FF, title="Error occurred!", description=f"Error occurred, response from db :\n {response}")
+        await ctx.send(embed=embed)
+
+@bot.command(name="containers")
+async def containers(ctx):
+    runningContainersCount = database.getActiveContainersCount()
+    if runningContainersCount == 0 :
+        await ctx.send(f"Currently no containers are running")
+    else:
+        await ctx.send(f"Currently **{runningContainersCount}** containers are running.")
+
+@bot.command(name="container")
+async def dosomething(ctx, subcommand : str = None, arg : str = None):
+    if subcommand == "stop" :
+        if not arg : 
+            await ctx.send(f"**Usage**\n$container stop <containerid>")
+        if arg == "all":
+            database.destroyAllContainers()
+            await ctx.send("All containers destruction is triggered!")
+        else:
+            status = database.checkContainerStatus(containerid)
+            if status == "running":
+                await ctx.send("**Done**\nContainer stopped!")
+            else :
+                await ctx.send(f"**Error**\nContainer status:- {status}")
+    
+    elif subcommand == "info":
+        if not arg:
+            await ctx.send(f"**Usage**\n$container info <containerid>")
+        if arg:
+            info = database.getContainerInfo(arg)
+            if not info:
+                await ctx.send(f"No container with id {arg} found")
+            else:
+                info = [i+" "+info[i]+"\n"for i in info]
+                info = "".join(info)
+                await ctx.send(f"**Container Info**\n"+info)
+    else:
+        await ctx.send("**Use $help**")
+ 
 @bot.event
 async def on_ready():
     print(f"Logged in as: {bot.user.name}")
