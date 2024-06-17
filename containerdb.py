@@ -9,7 +9,7 @@ class MongoDB():
 		
 		self.client = MongoClient(host, port, serverSelectionTimeoutMS=serverSelectionTimeout)
 		self.checkConnection()
-		self.db = self.client["domains"]
+		self.db = self.client["db"]
 		self.containers = self.db["containers"]
 	
 	def checkConnection(self) -> None:
@@ -19,19 +19,19 @@ class MongoDB():
 			print("SERVER NOT AVAILABLE")
 			sys.exit("Exiting....")
 
-	def isUserPresent(self, userid : str) -> bool :
+	def isUserPresent(self, userid : int) -> bool :
 		
 		if self.containers.find_one({"_id" : userid}): return True
 		else : return False
 
-	def addUser(self, userid : str) -> int:
+	def addUser(self, userid : int) -> int:
 
-		if isUserPresent(self, userid): return 53  # 53 = user already exists
+		if self.isUserPresent(userid): return 53  # 53 = user already exists
 		else:
 			self.containers.insert_one({"_id":userid, "activeContainers" : [], "isUserBanned" : False})
 			return 0 # 0 = success
 
-	def banUser(self, userid : str) -> int:
+	def banUser(self, userid : int) -> int:
 		
 		filters = {"_id" : userid}
 		update = {"$set": {'isUserBanned' : True}}
@@ -46,7 +46,7 @@ class MongoDB():
 		else :
 			return 0
 
-	def unbanUser(self, userid : str) -> int:
+	def unbanUser(self, userid : int) -> int:
 
 		filters = {"_id" : userid}
 		update = {"$set": {'isUserBanned' : False}}
@@ -61,22 +61,22 @@ class MongoDB():
 		else :
 			return 0
 
-	def deleteUser(self, userid : str) -> int:
+	def deleteUser(self, userid : int) -> int:
 		if not self.containers.find_one({"_id":userid}): return -1 # -1 Failed because no such record exists
 		else :
 			self.containers.delete_one({"_id":userid})
 			return 0
 
 
-	def isUserBan(self, userid : str) -> Optional[bool]:
+	def isUserBan(self, userid : int) -> Optional[bool]:
 
 		return self.containers.find_one({"_id" : userid})["isUserBanned"]
 
-	def numberOfRunningContainers(self, userid : str) -> int : 
+	def numberOfRunningContainers(self, userid : int) -> int : 
 
 		return len(self.containers.find_one({"_id" : userid})["activeContainers"])
 
-	def addContainer(self, userid : str, containerid : str) -> int: 
+	def addContainer(self, userid : int, containerid : str) -> int: 
 		
 		if isUserBan(userid) : return 1337  #1337 = User banned
 		
@@ -88,7 +88,7 @@ class MongoDB():
 			self.containers.update_one({"_id" : userid}, {"activeContainers" : activeContainers})
 			return 0
 
-	def removeContainer(self, userid : str, containerid : str) -> int:
+	def removeContainer(self, userid : int, containerid : str) -> int:
 		
 		activeContainers = self.containers.find_one({"_id": userid})["activeContainers"]
 
