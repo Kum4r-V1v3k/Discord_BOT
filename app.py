@@ -40,7 +40,7 @@ async def check_progress(interaction: Interaction, option : str = SlashOption(de
 
     desc = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
     desc = "\n".join(desc)
-    embed = Embed(color=0x5be61c, title=option, description=desc)
+    embed = Embed(color=0x5be61c, title=option.title(), description=desc)
     await interaction.response.send_message(embed=embed)
 
 @bot.slash_command(description="Start your challenge!")
@@ -49,21 +49,23 @@ async def challenge_start(interaction: Interaction, challengeid : str):
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
         return await interaction.response.send_message(embed=embed)
     
-    status = database.start_challenge(interaction.user.id, challengeid)
-    if status :
-        embed = Embed(color=0x0080ff, title="SUCCESS", description="Your challenge has started!\n"+status["notes"])
+    status = database.startChallenge(interaction.user.id, challengeid)
+    if status["started"] :
+        embed = Embed(color=0x0080ff, title="Running!", description="Your challenge has started!\n"+status["notes"])
         await interaction.response.send_message(embed=embed)
     else:
-        embed = Embed(color=0xe02222, title="Failure", description="Something went wrong, please try again later...")
+        embed = Embed(color=0xe02222, title="Failure!", description="Something went wrong..response from backend:- \n"+status["notes"])
         await interaction.response.send_message(embed=embed)
 
 @bot.slash_command(description="Stop a challenge.")
 async def challenge_stop(interaction:Interaction, challengeid : str) :
-    if not database.isChallengeStarted(interaction.user.id, challengeid) :
+    if not database.is_chall_started(interaction.user.id, challengeid) :
         embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
         await interaction.response.send_message(embed=embed)
-    database.closeChallenge(interaction.user.id, challengeid)
-    embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
+    check = database.stopChallenge(interaction.user.id, challengeid)
+    if check is True:
+        embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
+        await interaction.response.send_message(embed=embed)
 
 @bot.slash_command(description="Check your Active Challenges!")
 async def challenges_active(interaction:Interaction):
@@ -80,44 +82,39 @@ async def challenges_active(interaction:Interaction):
 @bot.slash_command(description="Challenges List!")
 async def challenge_list(interaction:Interaction, category : str = SlashOption(choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
     challenge_list = database.get_chall_list(category)
-    easy_challs = challenge_list["easy"]
-    medium_challs = challenge_list["medium"]
-    advanced_challs = challenge_list["hard"]
+
     description = ""
-    if not len(easy_challs) == 0:
-        description += "**Easy**\n- " + "\n- ".join([i+" "+easy_challs[i] for i in easy_challs])
-        description += "\n"
-    if not len(medium_challs) == 0:
-        description += "**Medium**\n- " + "\n- ".join([i+" "+medium_challs[i] for i in medium_challs])
-    if not len(advanced_challs) == 0:
-        description += '\n'
-        description += "**Hard**\n- " + "\n- ".join([i+" "+advanced_challs[i] for i in advanced_challs])
+    for difficulty in challenge_list:
+        if not challenge_list[difficulty]: continue
+        description += f"__**{difficulty.title()}**__\n- " + "\n- ".join([(chall+" "+challenge_list[difficulty][chall]) for chall in challenge_list[difficulty]])
+
     if not description :
-        embed = Embed(color=0xe02222, title="Sorry!", description="No Challenges added in this category")
-        return await interaction.response.send_message(embed=embed)
-    embed = Embed(color=0xB3D9FF, title="Here you go!", description=description)
+        embed = Embed(color=0xe02222, title="Sorry!", description="No Challenges added in this category")   
+    else:
+        embed = Embed(color=0xB3D9FF, title="Here you go!", description=description)
     return await interaction.response.send_message(embed=embed)
 
 @bot.slash_command(description="Submit Flag!")
 async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
     message = await interaction.response.send_message(embed=embed)
-    isChallengeStarted = database.isChallengeStarted(interaction.user.id, challengeID)
+    isChallengeStarted = database.is_chall_started(interaction.user.id, challengeid)
     if not isChallengeStarted : 
         embed = Embed(color=0xe02222, title="Error!", description="Possible Causes:\n1. You did not start the challenge before.\n2. The challenge expired.\nStart the challenge and try again..")
         return await message.edit(embed=embed)
     
     embed = Embed(color=0x9000cc, title="Hmm..", description="Challenge status : Active\nChecking Flag!")
     await message.edit(embed=embed)
-    isFlagCorrect = database.check_flag(interaction.user.id, flag)
+    isFlagCorrect = database.check_flag(interaction.user.id, challengeid, flag)
     if isFlagCorrect : 
         embed = Embed(color=0x0080ff, title="Congrats!!", description="Flag is correct!")
         await message.edit(embed=embed)
+
     else: 
         embed = Embed(color=0xe02222, title="Sorry!", description="Incorrect Flag, please try again!")
         await message.edit(embed=embed)
 
-@bot.command(name="ban_user")
+@bot.command(name="ban_user", description="Ban a fucking user!")
 async def ban_user(ctx, userid : int):
     response = database.ban_user(userid)
     if response == 0:
