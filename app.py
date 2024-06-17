@@ -3,7 +3,12 @@ from time import sleep
 from nextcord.ext import commands
 from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents
 from nextcord.ui import View, Button, Select
-import sys, database
+import sys, database, containerdb
+from containerdb import MongoDB
+from database import Database
+
+containerdb = MongoDB()
+database = Database()
 
 GID = [1221327905456656404]
 COMMAND_PREFIX = "$"
@@ -12,19 +17,22 @@ intents = Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
-@bot.slash_command(guild_ids=GID, description="Register Yourself!")
+@bot.slash_command(description="Register Yourself!")
 async def register_for_thrill(interaction: Interaction):
-    response = database.add_user(str(interaction.user.id), str(interaction.user))
-    if response == "SUCCESS":
+    
+    response = database.create_user(interaction.user.id, interaction.user.name)
+    if response == 0:
         embed = Embed(color=0x0080ff, title="SUCCESS", description="You have been added!")
         await interaction.response.send_message(embed=embed)
+    
     else:
+        response = "User already exists."
         embed = Embed(color=0xe02222, title="ERROR", description=response)
         await interaction.response.send_message(embed=embed)
     
-@bot.slash_command(guild_ids=GID, description="Check Your Progress!")
-async def check_progress(interaction: Interaction, option : str = SlashOption(description="Select one.", choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"}, required=False)):
-    progress_dict = database.check_progress(interaction.user.id, option)
+@bot.slash_command(description="Check Your Progress!")
+async def check_progress(interaction: Interaction, option : str = SlashOption(description="Select one.", choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
+    progress_dict = database.get_user_status(interaction.user.id, option)
 
     if not progress_dict : 
         embed = Embed(color=0xe02222, title="Something went wrong...", description="This was not expected, contact someone from @infobot")
@@ -35,7 +43,7 @@ async def check_progress(interaction: Interaction, option : str = SlashOption(de
     embed = Embed(color=0x5be61c, title=option, description=desc)
     await interaction.response.send_message(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Start your challenge!")
+@bot.slash_command(description="Start your challenge!")
 async def challenge_start(interaction: Interaction, challengeid : str):
     if len(challengeid) != 6: 
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
@@ -49,7 +57,7 @@ async def challenge_start(interaction: Interaction, challengeid : str):
         embed = Embed(color=0xe02222, title="Failure", description="Something went wrong, please try again later...")
         await interaction.response.send_message(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Stop a challenge.")
+@bot.slash_command(description="Stop a challenge.")
 async def challenge_stop(interaction:Interaction, challengeid : str) :
     if not database.isChallengeStarted(interaction.user.id, challengeid) :
         embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
@@ -57,7 +65,7 @@ async def challenge_stop(interaction:Interaction, challengeid : str) :
     database.closeChallenge(interaction.user.id, challengeid)
     embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
 
-@bot.slash_command(guild_ids=GID, description="Check your Active Challenges!")
+@bot.slash_command(description="Check your Active Challenges!")
 async def challenges_active(interaction:Interaction):
     activeChallenges = database.getActiveChallenges(interaction.user.id)
     if activeChallenges : 
@@ -68,7 +76,29 @@ async def challenges_active(interaction:Interaction):
     embed = Embed(color=0xB3D9FF, title="Active Challenges", description=description)
     return await interaction.response.send_message(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Submit Flag!")
+
+@bot.slash_command(description="Challenges List!")
+async def challenge_list(interaction:Interaction, category : str = SlashOption(choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
+    challenge_list = database.get_chall_list(category)
+    easy_challs = challenge_list["easy"]
+    medium_challs = challenge_list["medium"]
+    advanced_challs = challenge_list["hard"]
+    description = ""
+    if not len(easy_challs) == 0:
+        description += "**Easy**\n- " + "\n- ".join([i+" "+easy_challs[i] for i in easy_challs])
+        description += "\n"
+    if not len(medium_challs) == 0:
+        description += "**Medium**\n- " + "\n- ".join([i+" "+medium_challs[i] for i in medium_challs])
+    if not len(advanced_challs) == 0:
+        description += '\n'
+        description += "**Hard**\n- " + "\n- ".join([i+" "+advanced_challs[i] for i in advanced_challs])
+    if not description :
+        embed = Embed(color=0xe02222, title="Sorry!", description="No Challenges added in this category")
+        return await interaction.response.send_message(embed=embed)
+    embed = Embed(color=0xB3D9FF, title="Here you go!", description=description)
+    return await interaction.response.send_message(embed=embed)
+
+@bot.slash_command(description="Submit Flag!")
 async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
     message = await interaction.response.send_message(embed=embed)
@@ -90,7 +120,7 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
 @bot.command(name="ban_user")
 async def ban_user(ctx, userid : int):
     response = database.ban_user(userid)
-    if response is True:
+    if response == 0:
         embed = Embed(color=0xB3D9FF, title="Banned!", description=f"User with uid {userid} is now banned.")
         await ctx.send(embed=embed)
     else:
@@ -104,6 +134,7 @@ async def containers(ctx):
         await ctx.send(f"Currently no containers are running")
     else:
         await ctx.send(f"Currently **{runningContainersCount}** containers are running.")
+
 
 @bot.command(name="container")
 async def dosomething(ctx, subcommand : str = None, arg : str = None):
