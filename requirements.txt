@@ -1,0 +1,4 @@
+nextcord
+docker
+pymongo
+python-dotenv
