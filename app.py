@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-from time import sleep
 from nextcord.ext import commands
 from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents
 from nextcord.ui import View, Button, Select
-import sys, database
+from dotenv import load_dotenv
+from os import getenv
 from database import Database
 from misc import dock_it
 
+load_dotenv()
 database = Database()
 docker = dock_it()
 
-GID = [1221327905456656404]
 COMMAND_PREFIX = "$"
-TOKEN = sys.argv[1]
+TOKEN = getenv("TOKEN")
 intents = Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
@@ -46,7 +46,7 @@ async def check_progress(interaction: Interaction, option : str = SlashOption(de
     await interaction.followup.send(embed=embed)
 
 @bot.slash_command(description="Start your challenge!")
-async def challenge_start(interaction: Interaction, challengeid : str):
+async def challenge_start(interaction: Interaction, challengeid : int):
     await interaction.response.defer()
     if len(challengeid) != 6: 
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
@@ -61,7 +61,7 @@ async def challenge_start(interaction: Interaction, challengeid : str):
         await interaction.followup.send(embed=embed)
 
 @bot.slash_command(description="Stop a challenge.")
-async def challenge_stop(interaction:Interaction, challengeid : str) :
+async def challenge_stop(interaction:Interaction, challengeid : int) :
     await interaction.response.defer()
     if not database.is_chall_started(interaction.user.id, challengeid) :
         embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
@@ -100,7 +100,7 @@ async def challenge_list(interaction:Interaction, category : str = SlashOption(c
     return await interaction.response.send_message(embed=embed)
 
 @bot.slash_command(description="Submit Flag!")
-async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
+async def submit_flag(interaction : Interaction, challengeid : int, flag : str):
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
     message = await interaction.response.send_message(embed=embed)
     isChallengeStarted = database.is_chall_started(interaction.user.id, challengeid)
