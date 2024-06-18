@@ -1,12 +1,10 @@
 from typing import Dict, List, Any, Optional
 import pymongo
-from containerdb import MongoDB
 import os
 from misc import dock_it
 
 docker = dock_it()
-containerdb = MongoDB()
-categories = ["crypto","forensics","rev","pwn","osint","gskills"]
+categories = ["crypto","forensics","rev","pwn","osint","gskills","web"]
 
 
 class Database:
@@ -23,20 +21,17 @@ class Database:
 
     def create_user(self, uid: int, name: str) -> int:
         if self.user_exists(uid): return -1
-        containerdb.addUser(uid)
-
         user : Dict[str, Any] = {"_id": uid, "name" : name, "active_challs" : []}
-
         for category in categories:
             user[category] = []
+        user["active_containers"] = dict()
         self.users.insert_one(user)
+
         return 0
 
     def delete_user(self, uid: int) -> int:
         if not self.user_exists(uid) : return -1
-
         self.users.delete_one({"_id": uid})
-        containerdb.deleteUser(uid)
 
         return 0
 

@@ -2,10 +2,22 @@ import docker
 import os
 import socket
 from typing import *
+from docker.errors import NotFound
 
 class dock_it():
     def __init__(self):
         self.client = docker.from_env()
+
+    def botContainersList(self):   
+        totalContainers = self.client.containers.list()
+        botContainers = []
+        for container in totalContainers:
+            try: 
+                if container.labels["runby"] == "Syre":
+                    botContainers.append(container.id)
+            except KeyError :
+                continue
+        return {"botContainers":botContainers, "totalContainers":totalContainers}
 
     def getFreePort(self) -> int:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -16,7 +28,7 @@ class dock_it():
 
     def run_container(self, uid : str, chall : Dict):
         freePort = self.getFreePort()
-        labels = {"port":str(freePort), "challid":str(chall["_id"]), "uid":str(uid)}
+        labels = {"port":str(freePort), "challid":str(chall["_id"]), "uid":str(uid), "runby":"Syre"}
         image = open(os.path.join(chall["path"], "project/image")).read().strip()
         try:
             container = self.client.containers.run(image, detach=True, labels=labels, ports={80:freePort})
@@ -40,13 +52,9 @@ class dock_it():
 
     def getLabels(self, containerid : str) -> Dict[str, str]:
         try:
-            labels = client.containers.get(containerid).labels
+            labels = self.client.containers.get(containerid).labels
             return labels
         except Exception :
             return None
 
-
-
-
-
-        
+    

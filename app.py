@@ -3,7 +3,7 @@ from time import sleep
 from nextcord.ext import commands
 from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents
 from nextcord.ui import View, Button, Select
-import sys, database, containerdb
+import sys, database
 from database import Database
 from misc import dock_it
 
