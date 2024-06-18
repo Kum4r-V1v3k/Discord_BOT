@@ -32,61 +32,61 @@ async def register_for_thrill(interaction: Interaction):
     else:
         response = "User already exists."
         embed = Embed(color=0xe02222, title="ERROR", description=response)
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     
 @bot.slash_command(description="Check Your Progress!")
 async def check_progress(interaction: Interaction, option : str = SlashOption(description="Select one.", choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
     if interaction.user.id in BANNED_USERS : 
         return await interaction.response.send_message(embed=BAN_EMBED)
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     progress_dict = database.get_user_status(interaction.user.id, option)
 
     if not progress_dict : 
         embed = Embed(color=0xe02222, title="Something went wrong...", description="This was not expected, contact someone from @infobot")
-        return await interaction.followup.send(embed=embed)
+        return await interaction.followup.send(embed=embed, ephemeral=True)
 
     desc = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
     desc = "\n".join(desc)
     embed = Embed(color=0x5be61c, title=option.title(), description=desc)
-    await interaction.followup.send(embed=embed)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 @bot.slash_command(description="Start your challenge!")
 async def challenge_start(interaction: Interaction, challengeid : str):
     if interaction.user.id in BANNED_USERS : 
         return await interaction.response.send_message(embed=BAN_EMBED)
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     if len(challengeid) != 6: 
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
-        return await interaction.followup.send(embed=embed)
+        return await interaction.followup.send(embed=embed, ephemeral=True)
     
     status = database.startChallenge(interaction.user.id, challengeid)
     if status["started"] :
         embed = Embed(color=0x0080ff, title="Running!", description="Your challenge has started!\n"+status["notes"])
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     else:
         embed = Embed(color=0xe02222, title="Failure!", description="Response from backend:- \n"+status["notes"])
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 @bot.slash_command(description="Stop a challenge.")
 async def challenge_stop(interaction:Interaction, challengeid : str) :
     if interaction.user.id in BANNED_USERS : 
-        return await interaction.response.send_message(embed=BAN_EMBED)
+        return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=True)
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
     if not database.is_chall_started(interaction.user.id, challengeid) :
         embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
     check = database.stopChallenge(interaction.user.id, challengeid)
     if check is True:
         embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 @bot.slash_command(description="Check your Active Challenges!")
 async def challenges_active(interaction:Interaction):
     if interaction.user.id in BANNED_USERS : 
-        return await interaction.response.send_message(embed=BAN_EMBED)
+        return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=True)
 
     await interaction.response.defer()
     activeChallenges = database.getActiveChallenges(interaction.user.id)
@@ -96,7 +96,7 @@ async def challenges_active(interaction:Interaction):
     else:
         description = "No active challenges"
     embed = Embed(color=0xB3D9FF, title="Active Challenges", description=description)
-    return await interaction.followup.send(embed=embed)
+    return await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @bot.slash_command(description="Challenges List!")
@@ -106,15 +106,20 @@ async def challenge_list(interaction:Interaction, category : str = SlashOption(c
 
     challenge_list = database.get_chall_list(category)
     description = ""
+    
     for difficulty in challenge_list:
-        if not challenge_list[difficulty]: continue
-        description += f"__**{difficulty.title()}**__\n- " + "\n- ".join([(chall+" "+challenge_list[difficulty][chall]) for chall in challenge_list[difficulty]])
+        temp = []
+        if  len(challenge_list[difficulty]) == 0: continue
+        for challenge in challenge_list[difficulty]:
+            temp.append(tuple(challenge.keys())[0] +"    "+tuple(challenge.values())[0])
+        description += "\n\n"
+        description += f"__**{difficulty.title()}**__\n- " + "\n- ".join(temp) 
 
     if not description :
         embed = Embed(color=0xe02222, title="Sorry!", description="No Challenges added in this category")   
     else:
         embed = Embed(color=0xB3D9FF, title="Here you go!", description=description)
-    return await interaction.response.send_message(embed=embed)
+    return await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.slash_command(description="Submit Flag!")
 async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
@@ -122,7 +127,7 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
         return await interaction.response.send_message(embed=BAN_EMBED)
 
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
-    message = await interaction.response.send_message(embed=embed)
+    message = await interaction.response.send_message(embed=embed, ephemeral=True)
     isChallengeStarted = database.is_chall_started(interaction.user.id, challengeid)
     if not database.isChallengePresent(challengeid) :
         embed = Embed(color=0xe02222, title="Error!", description="Invalid challenge id entered.")
@@ -142,6 +147,12 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
         embed = Embed(color=0xe02222, title="Sorry!", description="Incorrect Flag, please try again!")
         await message.edit(embed=embed)
 
+@bot.command(name="flag")
+async def flag(ctx, challengeid:int):
+    flag = database.getFlag(challengeid)
+    if flag is None: return "Invalid challenge id."
+    return await ctx.send("`"+flag+"`")
+    
 @bot.group(name="user", invoke_without_command=True)
 async def user(ctx):
     if ctx.invoked_subcommand is None:
@@ -156,7 +167,7 @@ async def progress(ctx, username : str = None):
 
     for category in ["crypto", "rev", "web", "forensics", "osint", "pwn"]:
         if len(user_info[category]) != 0:
-            description += f"**Challs completed in {category}**\n" + "\n- ".join(user_info[category])
+            description += f"**Challs completed in {category}**\n- " + "\n- ".join(user_info[category])
             description += "\n"
     if len(description) == 0 : description = "No progress yet."
     await ctx.send(description)
@@ -191,6 +202,7 @@ async def remove(ctx, username:str):
         await ctx.send("User deleted.")
     else : 
         await ctx.send("No such user has registered.")
+
 
 @bot.group(name="containers", invoke_without_command=True)
 async def containers(ctx):
