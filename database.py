@@ -88,11 +88,10 @@ class Database:
 
     def get_chall_list(self, category: str) -> Dict[str, Dict[str, str]]:
         challs = {"easy":[],"medium":[],"hard":[]}
-        if len(list(self.challs.find({"category":category}, {"difficulty":1,"name":1, "_id":1}))) != 0:
-            for chall in self.challs.find({"category":category}, {"difficulty":1,"name":1, "_id":1}):
-                new_dict = {}
-                new_dict[str(chall["_id"])] = chall["name"]
-            challs[chall["difficulty"]] = new_dict
+        
+        for chall in self.challs.find({"category":category}):
+                challs[chall["difficulty"]].append({str(chall["_id"]) : chall["name"]})
+            
         return challs
 
     def check_flag(self, uid : int, challid: int, flag : str) -> bool:
@@ -101,6 +100,10 @@ class Database:
             self.updateStatus(uid, challid)
             return True
         else : return False
+
+    def getFlag(self, challid:int)->str:
+        flag = self.challs.find_one({"_id":str(challid)})["flag"]
+        return flag
 
     def updateStatus(self, uid : int, challid : int) -> None:
         challengeDetails = self.challs.find_one({"_id" : challid})
