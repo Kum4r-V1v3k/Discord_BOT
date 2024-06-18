@@ -99,6 +99,9 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
     message = await interaction.response.send_message(embed=embed)
     isChallengeStarted = database.is_chall_started(interaction.user.id, challengeid)
+    if not database.isChallengePresent(challengeid) :
+        embed = Embed(color=0xe02222, title="Error!", description="Invalid challenge id entered.")
+        return await message.edit(embed=embed)
     if not isChallengeStarted : 
         embed = Embed(color=0xe02222, title="Error!", description="Possible Causes:\n1. You did not start the challenge before.\n2. The challenge expired.\nStart the challenge and try again..")
         return await message.edit(embed=embed)
