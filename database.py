@@ -74,9 +74,8 @@ class Database:
         challengeName = challengeDetails["name"]
         challengeCategory = challengeDetails["category"]
         challengeCompleted = self.users.find_one({"_id" : uid})[challengeCategory]
-        print(challengeCompleted)
-        challengeCompleted.append(challengeName)
-        self.users.update_one({"_id" : uid}, {"$set" : {challengeCategory:challengeCompleted}})
+        if challengeName not in challengeCompleted : challengeCompleted.append(challengeName) 
+        self.users.update_one({"_id" : uid}, {"$set" : {challengeCategory : challengeCompleted}})
         
 
     def is_chall_started(self, uid: int, challid : int) -> bool:
@@ -130,7 +129,7 @@ class Database:
             
         return {"started":started, "notes":notes}
     
-    def startContainer(self, chall : Dict, uid : int) :
+    def startContainer(self, chall : Dict, uid : int) -> int:
         self.container = docker.run_container(uid, chall)
         if self.container is None : 
             return -1
