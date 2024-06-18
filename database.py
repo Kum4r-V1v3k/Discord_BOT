@@ -16,6 +16,9 @@ class Database:
         self.containers = db['containers']
         self.container = None
 
+    def user_info(self, username:str) :
+        return self.users.find_one({"name":username})
+
     def user_exists(self, uid: int) -> int:
         return self.users.count_documents({"_id":uid}, limit = 1)
 
@@ -25,9 +28,14 @@ class Database:
         for category in categories:
             user[category] = []
         user["active_containers"] = dict()
+        user["isUserBanned"] = False
         self.users.insert_one(user)
 
         return 0
+
+    def isUserBanned(self, username:str) -> bool:
+        info = self.user_info(username)
+        return info["isUserBanned"] if info is not None else None
 
     def delete_user(self, uid: int) -> int:
         if not self.user_exists(uid) : return -1
@@ -37,7 +45,23 @@ class Database:
 
     def getActiveChallenges(self, uid:int) -> Optional[Dict]:
         return None if len(self.users.find_one({"_id":uid})["active_challs"]) == 0 else self.users.find_one({"_id":uid})["active_challs"]
-        
+    
+    def banUser(self, username : str) :
+        info = self.user_info(username)
+        if info is None : return f"No such user found"
+        if info["isUserBanned"] : return f"User is already banned"
+        else : 
+            self.users.update_one({"name":username}, {"$set":{"isUserBanned":True}})
+            return f"User is banned"
+
+    def unbanUser(self, username:str):
+        info = self.user_info(username)
+        if info is None : return f"No such user found"
+        if not info["isUserBanned"] : return f"User is not banned"
+        else : 
+            self.users.update_one({"name":username}, {"$set":{"isUserBanned":False}})
+            return f"User is no longer banned"
+
     def get_user_status(self, uid: int, category: str) -> Dict[str,str]:
         completed = self.users.find_one({"_id": uid})[category]
         status = {}
