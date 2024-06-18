@@ -15,7 +15,21 @@ class Database:
         self.users = db['users']
         self.containers = db['containers']
         self.container = None
+        self.resetChallenges()
+        self.containerDestruction()
+        
+    def resetChallenges(self):
+        self.users.update_many({}, {"$set": {"active_containers":dict(), "active_challs":list()}})
 
+    def containerDestruction(self):
+        allContainers = docker.botContainersList()
+        for container in allContainers:
+            labels = container.labels
+            container.stop()
+            container.remove()
+
+    def bannedUsers(self):
+        return [i["_id"] for i in list(self.users.find({"isUserBanned":True}))]
     def user_info(self, username:str) :
         return self.users.find_one({"name":username})
 
@@ -157,13 +171,21 @@ class Database:
         self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
         return 0
 
+    def getUserContainers(self, username:str = None):
+        if username:
+            return self.users.find({"name": username})
+        else: 
+            return self.users.find()
 
     def stopChallenge(self, uid : int, challid : str) -> bool:
         chall = self.challs.find_one({"_id":challid})
+        uid = int(uid)
         if chall["category"] == "web" : 
             docker.remove_container(self.users.find_one({"_id":uid})["active_containers"][challid])
             activeContainers = self.users.find_one({"_id":uid})["active_containers"]
+            print(activeContainers)
             del activeContainers[challid]
+            print(activeContainers)
             self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
         
         activeChallenges = self.users.find_one({"_id" : uid})["active_challs"]
@@ -171,5 +193,4 @@ class Database:
        
         self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
         return True
-
 

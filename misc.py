@@ -14,13 +14,13 @@ class dock_it():
         for container in totalContainers:
             try: 
                 if container.labels["runby"] == "Syre":
-                    botContainers.append(container.id)
+                    botContainers.append(container)
             except KeyError :
                 continue
-        return {"botContainers":botContainers, "totalContainers":totalContainers}
+        return botContainers 
 
     def getFreePort(self) -> int:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s = socket.socket()
         s.bind(('', 0))
         addr = s.getsockname()
         s.close()
