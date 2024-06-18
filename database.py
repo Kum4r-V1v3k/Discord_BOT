@@ -2,9 +2,12 @@ from typing import Dict, List, Any, Optional
 import pymongo
 from containerdb import MongoDB
 import os
+from misc import dock_it
 
+docker = dock_it()
 containerdb = MongoDB()
 categories = ["crypto","forensics","rev","pwn","osint","gskills"]
+
 
 class Database:
     def __init__(self) -> None:
@@ -13,6 +16,7 @@ class Database:
         self.challs = db['challs']
         self.users = db['users']
         self.containers = db['containers']
+        self.container = None
 
     def user_exists(self, uid: int) -> int:
         return self.users.count_documents({"_id":uid}, limit = 1)
@@ -70,8 +74,9 @@ class Database:
         challengeName = challengeDetails["name"]
         challengeCategory = challengeDetails["category"]
         challengeCompleted = self.users.find_one({"_id" : uid})[challengeCategory]
+        print(challengeCompleted)
         challengeCompleted.append(challengeName)
-        self.users.update_one({"_id" : uid}, {"$set" : {challengeCategory:challengeName}})
+        self.users.update_one({"_id" : uid}, {"$set" : {challengeCategory:challengeCompleted}})
         
 
     def is_chall_started(self, uid: int, challid : int) -> bool:
@@ -105,15 +110,47 @@ class Database:
             notes = "Invalid Challenge ID!"
 
         else:
-            started = True
-            notes = open(os.path.join(self.challs.find_one({"_id" : challid})["path"], "description.txt")).read()
-            activeChallenges.append(challid)
-            self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
+            chall = self.challs.find_one({"_id" : challid})
+            if chall["category"] == "web":
+                code = self.startContainer(chall, uid)
+                if code != 0 : 
+                    started = False
+                    notes = "Backend Error!"
+                else:
+                    started = True
+                    notes = open(os.path.join(chall["path"], "description.txt")).read()
+                    notes += "\nhttp://ruleoverworld.duckdns.org:"+self.container.labels["port"]
+                    activeChallenges.append(challid)
+                    self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
+            else:
+                started = True
+                notes = open(os.path.join(chall["path"], "description.txt")).read()
+                activeChallenges.append(challid)
+                self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
+            
         return {"started":started, "notes":notes}
     
+    def startContainer(self, chall : Dict, uid : int) :
+        self.container = docker.run_container(uid, chall)
+        if self.container is None : 
+            return -1
+        activeContainers = self.users.find_one({"_id":uid})["active_containers"]
+        activeContainers[str(chall["_id"])] = str(self.container.id)
+        self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
+        return 0
+
+
     def stopChallenge(self, uid : int, challid : str) -> bool:
+        chall = self.challs.find_one({"_id":challid})
+        if chall["category"] == "web" : 
+            docker.remove_container(self.users.find_one({"_id":uid})["active_containers"][challid])
+            activeContainers = self.users.find_one({"_id":uid})["active_containers"]
+            del activeContainers[challid]
+            self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
+        
         activeChallenges = self.users.find_one({"_id" : uid})["active_challs"]
         activeChallenges.remove(challid)
+       
         self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
         return True
 
