@@ -4,6 +4,11 @@ from nextcord.ext import commands
 from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents
 from nextcord.ui import View, Button, Select
 import sys, database
+from database import Database
+from misc import dock_it
+
+database = Database()
+docker = dock_it()
 
 GID = [1221327905456656404]
 COMMAND_PREFIX = "$"
@@ -12,53 +17,63 @@ intents = Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
-@bot.slash_command(guild_ids=GID, description="Register Yourself!")
+@bot.slash_command(description="Register Yourself!")
 async def register_for_thrill(interaction: Interaction):
-    response = database.add_user(str(interaction.user.id), str(interaction.user))
-    if response == "SUCCESS":
+    await interaction.response.defer()
+    response = database.create_user(interaction.user.id, interaction.user.name)
+    if response == 0:
         embed = Embed(color=0x0080ff, title="SUCCESS", description="You have been added!")
-        await interaction.response.send_message(embed=embed)
-    else:
-        embed = Embed(color=0xe02222, title="ERROR", description=response)
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
     
-@bot.slash_command(guild_ids=GID, description="Check Your Progress!")
-async def check_progress(interaction: Interaction, option : str = SlashOption(description="Select one.", choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"}, required=False)):
-    progress_dict = database.check_progress(interaction.user.id, option)
+    else:
+        response = "User already exists."
+        embed = Embed(color=0xe02222, title="ERROR", description=response)
+        await interaction.followup.send(embed=embed)
+    
+@bot.slash_command(description="Check Your Progress!")
+async def check_progress(interaction: Interaction, option : str = SlashOption(description="Select one.", choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
+
+    await interaction.response.defer()
+    progress_dict = database.get_user_status(interaction.user.id, option)
 
     if not progress_dict : 
         embed = Embed(color=0xe02222, title="Something went wrong...", description="This was not expected, contact someone from @infobot")
-        return await interaction.response.send_message(embed=embed)
+        return await interaction.followup.send(embed=embed)
 
     desc = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
     desc = "\n".join(desc)
-    embed = Embed(color=0x5be61c, title=option, description=desc)
-    await interaction.response.send_message(embed=embed)
+    embed = Embed(color=0x5be61c, title=option.title(), description=desc)
+    await interaction.followup.send(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Start your challenge!")
+@bot.slash_command(description="Start your challenge!")
 async def challenge_start(interaction: Interaction, challengeid : str):
+    await interaction.response.defer()
     if len(challengeid) != 6: 
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
-        return await interaction.response.send_message(embed=embed)
+        return await interaction.followup.send(embed=embed)
     
-    status = database.start_challenge(interaction.user.id, challengeid)
-    if status :
-        embed = Embed(color=0x0080ff, title="SUCCESS", description="Your challenge has started!\n"+status["notes"])
-        await interaction.response.send_message(embed=embed)
+    status = database.startChallenge(interaction.user.id, challengeid)
+    if status["started"] :
+        embed = Embed(color=0x0080ff, title="Running!", description="Your challenge has started!\n"+status["notes"])
+        await interaction.followup.send(embed=embed)
     else:
-        embed = Embed(color=0xe02222, title="Failure", description="Something went wrong, please try again later...")
-        await interaction.response.send_message(embed=embed)
+        embed = Embed(color=0xe02222, title="Failure!", description="Response from backend:- \n"+status["notes"])
+        await interaction.followup.send(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Stop a challenge.")
+@bot.slash_command(description="Stop a challenge.")
 async def challenge_stop(interaction:Interaction, challengeid : str) :
-    if not database.isChallengeStarted(interaction.user.id, challengeid) :
+    await interaction.response.defer()
+    if not database.is_chall_started(interaction.user.id, challengeid) :
         embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
-        await interaction.response.send_message(embed=embed)
-    database.closeChallenge(interaction.user.id, challengeid)
-    embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
+        await interaction.followup.send(embed=embed)
+    check = database.stopChallenge(interaction.user.id, challengeid)
+    if check is True:
+        embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
+        await interaction.followup.send(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Check your Active Challenges!")
+@bot.slash_command(description="Check your Active Challenges!")
 async def challenges_active(interaction:Interaction):
+    await interaction.response.defer()
     activeChallenges = database.getActiveChallenges(interaction.user.id)
     if activeChallenges : 
         description = "Here you go:- \n"
@@ -66,31 +81,51 @@ async def challenges_active(interaction:Interaction):
     else:
         description = "No active challenges"
     embed = Embed(color=0xB3D9FF, title="Active Challenges", description=description)
+    return await interaction.followup.send(embed=embed)
+
+
+@bot.slash_command(description="Challenges List!")
+async def challenge_list(interaction:Interaction, category : str = SlashOption(choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
+    challenge_list = database.get_chall_list(category)
+
+    description = ""
+    for difficulty in challenge_list:
+        if not challenge_list[difficulty]: continue
+        description += f"__**{difficulty.title()}**__\n- " + "\n- ".join([(chall+" "+challenge_list[difficulty][chall]) for chall in challenge_list[difficulty]])
+
+    if not description :
+        embed = Embed(color=0xe02222, title="Sorry!", description="No Challenges added in this category")   
+    else:
+        embed = Embed(color=0xB3D9FF, title="Here you go!", description=description)
     return await interaction.response.send_message(embed=embed)
 
-@bot.slash_command(guild_ids=GID, description="Submit Flag!")
+@bot.slash_command(description="Submit Flag!")
 async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
     message = await interaction.response.send_message(embed=embed)
-    isChallengeStarted = database.isChallengeStarted(interaction.user.id, challengeID)
+    isChallengeStarted = database.is_chall_started(interaction.user.id, challengeid)
+    if not database.isChallengePresent(challengeid) :
+        embed = Embed(color=0xe02222, title="Error!", description="Invalid challenge id entered.")
+        return await message.edit(embed=embed)
     if not isChallengeStarted : 
         embed = Embed(color=0xe02222, title="Error!", description="Possible Causes:\n1. You did not start the challenge before.\n2. The challenge expired.\nStart the challenge and try again..")
         return await message.edit(embed=embed)
     
     embed = Embed(color=0x9000cc, title="Hmm..", description="Challenge status : Active\nChecking Flag!")
     await message.edit(embed=embed)
-    isFlagCorrect = database.check_flag(interaction.user.id, flag)
+    isFlagCorrect = database.check_flag(interaction.user.id, challengeid, flag)
     if isFlagCorrect : 
         embed = Embed(color=0x0080ff, title="Congrats!!", description="Flag is correct!")
         await message.edit(embed=embed)
+
     else: 
         embed = Embed(color=0xe02222, title="Sorry!", description="Incorrect Flag, please try again!")
         await message.edit(embed=embed)
 
-@bot.command(name="ban_user")
+@bot.command(name="ban_user", description="Ban a fucking user!")
 async def ban_user(ctx, userid : int):
     response = database.ban_user(userid)
-    if response is True:
+    if response == 0:
         embed = Embed(color=0xB3D9FF, title="Banned!", description=f"User with uid {userid} is now banned.")
         await ctx.send(embed=embed)
     else:
@@ -104,6 +139,7 @@ async def containers(ctx):
         await ctx.send(f"Currently no containers are running")
     else:
         await ctx.send(f"Currently **{runningContainersCount}** containers are running.")
+
 
 @bot.command(name="container")
 async def dosomething(ctx, subcommand : str = None, arg : str = None):
