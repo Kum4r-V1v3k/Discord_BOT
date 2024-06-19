@@ -29,7 +29,7 @@ class dock_it():
     def run_container(self, uid : str, chall : Dict):
         freePort = self.getFreePort()
         labels = {"port":str(freePort), "challid":str(chall["_id"]), "uid":str(uid), "runby":"Syre"}
-        image = open(os.path.join(chall["path"], "project/image")).read().strip()
+        image = open(os.path.join(chall["path"], "image")).read().strip()
         try:
             container = self.client.containers.run(image, detach=True, labels=labels, ports={80:freePort})
             return container

@@ -30,6 +30,7 @@ class Database:
 
     def bannedUsers(self):
         return [i["_id"] for i in list(self.users.find({"isUserBanned":True}))]
+    
     def user_info(self, username:str) :
         return self.users.find_one({"name":username})
 
@@ -58,8 +59,17 @@ class Database:
         return 0
 
     def getActiveChallenges(self, uid:int) -> Optional[Dict]:
-        return None if len(self.users.find_one({"_id":uid})["active_challs"]) == 0 else self.users.find_one({"_id":uid})["active_challs"]
-    
+
+        if len(self.users.find_one({"_id":uid})["active_challs"]) == 0 : return None
+        
+        else: 
+            toReturn = list()
+            activeChalls = self.users.find_one({"_id":uid})["active_challs"]
+            for chall in activeChalls : 
+                name = self.challs.find_one({"_id":chall}, {"name":1, "_id":0})
+                toReturn.append(chall + "  " + name["name"])
+            return toReturn
+
     def banUser(self, username : str) :
         info = self.user_info(username)
         if info is None : return f"No such user found"
@@ -81,9 +91,9 @@ class Database:
         status = {}
         for chall in self.challs.find({"category":category}, {"_id":0, "name":1}):
             if chall["name"] in completed:
-                status[chall["name"]] = "completed"
+                status[chall["name"]] = "Completed"
             else:
-                status[chall["name"]] = "not completed"
+                status[chall["name"]] = "Not Completed"
         return None if not status else status
 
     def get_chall_list(self, category: str) -> Dict[str, Dict[str, str]]:
@@ -157,12 +167,14 @@ class Database:
                     notes += "\nhttp://ruleoverworld.duckdns.org:"+self.container.labels["port"]
                     activeChallenges.append(challid)
                     self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
+                    notes += "\n"+chall["name"]+"\n"+chall["_id"]
             else:
                 started = True
                 notes = open(os.path.join(chall["path"], "description.txt")).read()
                 activeChallenges.append(challid)
                 self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
-            
+                notes += "\n"+chall["name"]+"\n"+chall["_id"]
+        
         return {"started":started, "notes":notes}
     
     def startContainer(self, chall : Dict, uid : int) -> int:
@@ -186,13 +198,14 @@ class Database:
         if chall["category"] == "web" : 
             docker.remove_container(self.users.find_one({"_id":uid})["active_containers"][challid])
             activeContainers = self.users.find_one({"_id":uid})["active_containers"]
-            print(activeContainers)
             del activeContainers[challid]
-            print(activeContainers)
             self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
         
         activeChallenges = self.users.find_one({"_id" : uid})["active_challs"]
-        activeChallenges.remove(challid)
+        try:
+            activeChallenges.remove(challid) 
+        except Exception as e:
+            print(str(e))
        
         self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
         return True

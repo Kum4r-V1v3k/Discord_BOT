@@ -20,6 +20,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 BAN_EMBED = Embed(color=0xe22222, title="Sorry!", description="You are banned!")
 BANNED_USERS = database.bannedUsers()
+EPHEMERAL = True
 
 @bot.slash_command(description="Register Yourself!")
 async def register_for_thrill(interaction: Interaction):
@@ -32,61 +33,61 @@ async def register_for_thrill(interaction: Interaction):
     else:
         response = "User already exists."
         embed = Embed(color=0xe02222, title="ERROR", description=response)
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
     
 @bot.slash_command(description="Check Your Progress!")
 async def check_progress(interaction: Interaction, option : str = SlashOption(description="Select one.", choices={"crypto": "crypto", "web": "web", "rev":"rev", "pwn":"pwn", "gskills":"gskills","forensics":"forensics"})):
     if interaction.user.id in BANNED_USERS : 
         return await interaction.response.send_message(embed=BAN_EMBED)
 
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=EPHEMERAL)
     progress_dict = database.get_user_status(interaction.user.id, option)
 
     if not progress_dict : 
         embed = Embed(color=0xe02222, title="Something went wrong...", description="This was not expected, contact someone from @infobot")
-        return await interaction.followup.send(embed=embed, ephemeral=True)
+        return await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
     desc = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
     desc = "\n".join(desc)
     embed = Embed(color=0x5be61c, title=option.title(), description=desc)
-    await interaction.followup.send(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
 @bot.slash_command(description="Start your challenge!")
 async def challenge_start(interaction: Interaction, challengeid : str):
     if interaction.user.id in BANNED_USERS : 
         return await interaction.response.send_message(embed=BAN_EMBED)
 
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=EPHEMERAL)
     if len(challengeid) != 6: 
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
-        return await interaction.followup.send(embed=embed, ephemeral=True)
+        return await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
     
     status = database.startChallenge(interaction.user.id, challengeid)
     if status["started"] :
         embed = Embed(color=0x0080ff, title="Running!", description="Your challenge has started!\n"+status["notes"])
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
     else:
         embed = Embed(color=0xe02222, title="Failure!", description="Response from backend:- \n"+status["notes"])
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
 @bot.slash_command(description="Stop a challenge.")
 async def challenge_stop(interaction:Interaction, challengeid : str) :
     if interaction.user.id in BANNED_USERS : 
-        return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=True)
+        return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=EPHEMERAL)
 
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer(ephemeral=EPHEMERAL)
     if not database.is_chall_started(interaction.user.id, challengeid) :
         embed = Embed(color=0xe02222, title="Error", description="You haven't started this challenge.")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
     check = database.stopChallenge(interaction.user.id, challengeid)
     if check is True:
         embed = Embed(color=0xe02222, title="Done!", description="Your challenge is now stopped.")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
 @bot.slash_command(description="Check your Active Challenges!")
 async def challenges_active(interaction:Interaction):
     if interaction.user.id in BANNED_USERS : 
-        return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=True)
+        return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=EPHEMERAL)
 
     await interaction.response.defer()
     activeChallenges = database.getActiveChallenges(interaction.user.id)
@@ -96,7 +97,7 @@ async def challenges_active(interaction:Interaction):
     else:
         description = "No active challenges"
     embed = Embed(color=0xB3D9FF, title="Active Challenges", description=description)
-    return await interaction.followup.send(embed=embed, ephemeral=True)
+    return await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
 
 @bot.slash_command(description="Challenges List!")
@@ -119,7 +120,7 @@ async def challenge_list(interaction:Interaction, category : str = SlashOption(c
         embed = Embed(color=0xe02222, title="Sorry!", description="No Challenges added in this category")   
     else:
         embed = Embed(color=0xB3D9FF, title="Here you go!", description=description)
-    return await interaction.response.send_message(embed=embed, ephemeral=True)
+    return await interaction.response.send_message(embed=embed, ephemeral=EPHEMERAL)
 
 @bot.slash_command(description="Submit Flag!")
 async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
@@ -127,7 +128,7 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
         return await interaction.response.send_message(embed=BAN_EMBED)
 
     embed = Embed(color=0xB3D9FF, title="Please Wait", description="Checking challenge status...")
-    message = await interaction.response.send_message(embed=embed, ephemeral=True)
+    message = await interaction.response.send_message(embed=embed, ephemeral=EPHEMERAL)
     isChallengeStarted = database.is_chall_started(interaction.user.id, challengeid)
     if not database.isChallengePresent(challengeid) :
         embed = Embed(color=0xe02222, title="Error!", description="Invalid challenge id entered.")
@@ -156,7 +157,7 @@ async def flag(ctx, challengeid:int):
 @bot.group(name="user", invoke_without_command=True)
 async def user(ctx):
     if ctx.invoked_subcommand is None:
-        await ctx.send(f"Available subcommands:- \nprogress\nban\nunban")
+        await ctx.send(f"Available subcommands:- \nprogress\nban\nunban\nstatus")
 
 @user.command(name="progress")
 async def progress(ctx, username : str = None):
