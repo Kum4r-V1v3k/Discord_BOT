@@ -86,6 +86,18 @@ class Database:
             self.users.update_one({"name":username}, {"$set":{"isUserBanned":False}})
             return f"User is no longer banned"
 
+    def allChalls(self,category):
+        return self.challs.find({"category":category})
+    
+    def getDifficulty(self,name,category):
+        return self.challs.find_one({"name":name, "category":category})["difficulty"]
+        
+    def userChalls(self,uid,category):
+        return self.users.find_one({"_id":uid})[category]
+
+    def getCategory(self,challengeid):
+        return self.challs.find_one({"_id":challengeid})["category"]
+
     def get_user_status(self, uid: int, category: str) -> Dict[str,str]:
         completed = self.users.find_one({"_id": uid})[category]
         status = {}
@@ -145,11 +157,12 @@ class Database:
             notes = "Challenge already running!"
             return {"started":started, "notes":notes}
 
-        if len(activeChallenges) >=3 : 
+        if len(activeChallenges) >=8 : 
             started = False
             notes = "Maximum number of active challenges reached."
             return {"started":started, "notes":notes}
 
+        files = []
         if not self.isChallengePresent(challid):
             started = False
             notes = "Invalid Challenge ID!"
@@ -164,18 +177,28 @@ class Database:
                 else:
                     started = True
                     notes = open(os.path.join(chall["path"], "description.txt")).read()
+                    #notes += "\n\nLink:\n> "+chall["link"]
                     notes += "\nhttp://ruleoverworld.duckdns.org:"+self.container.labels["port"]
                     activeChallenges.append(challid)
                     self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
-                    notes += "\n"+chall["name"]+"\n"+chall["_id"]
+                    notes += "\n\n"+chall["name"]+"\t"+chall["_id"]
+                    filesPath = os.path.join(chall["path"], "files")
+                    for file in os.listdir(filesPath) > 0 :
+                        files.append(os.path.join(filesPath, file))
+
+
             else:
                 started = True
                 notes = open(os.path.join(chall["path"], "description.txt")).read()
+                #notes+="\n\nLink:\n> "+chall["link"]
                 activeChallenges.append(challid)
                 self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
-                notes += "\n"+chall["name"]+"\n"+chall["_id"]
+                notes += "\n\n"+chall["_id"]+"\t"+chall["name"]
+                filesPath = os.path.join(chall["path"], "files")
+                for file in os.listdir(filesPath) :
+                    files.append(os.path.join(filesPath, file))
         
-        return {"started":started, "notes":notes}
+        return {"started":started, "notes":notes, "files":files}
     
     def startContainer(self, chall : Dict, uid : int) -> int:
         self.container = docker.run_container(uid, chall)

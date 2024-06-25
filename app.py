@@ -5,7 +5,7 @@ from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, 
 from nextcord.ui import View, Button, Select
 from database import Database
 from misc import dock_it
-import os
+import os, nextcord
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,10 +17,64 @@ COMMAND_PREFIX = "$"
 TOKEN = os.getenv("TOKEN")
 intents = Intents.default()
 intents.message_content = True
+intents.members = True
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 BAN_EMBED = Embed(color=0xe22222, title="Sorry!", description="You are banned!")
 BANNED_USERS = database.bannedUsers()
-EPHEMERAL = True
+EPHEMERAL = False
+ROLES = {'crypto':['Decryptor', 'Unobfuscator', 'KnowsNothingButCrypto']}
+
+
+def getRole(category, index):
+    return ROLES[category][index]
+
+async def assignRole(uid, role):
+  guild = bot.get_guild(GID[0])
+  user = guild.get_member(int(uid))
+  roles = guild.roles
+  for i in roles:
+    if role == i.name :
+        role = i
+        break
+  await user.add_roles(role)
+
+async def removeRole(uid, role):
+  guild = bot.get_guild(GID[0])
+  user = guild.get_member(int(uid))
+  roles = guild.roles
+  for i in roles:
+    if role == i.name :
+        role = i
+        break
+  await user.remove_roles(role)
+async def checkCompletionAssignRole(uid, category):
+  allChalls = database.allChalls(category)
+  totalPoints = 0
+  for chall in allChalls:
+    if chall["difficulty"] == "easy": totalPoints += 1
+    elif chall["difficulty"] == "medium" : totalPoints += 2
+    else : totalPoints += 3
+  userChalls = database.userChalls(uid,category)
+  userPoints = 0
+  for chall in userChalls:
+     challDifficulty = database.getDifficulty(chall, category)
+     if challDifficulty == "easy" : userPoints += 1
+     elif challDifficulty == "medium" : userPoints += 2
+     else : userPoints += 3
+  completion = int((userPoints / totalPoints) * 100)
+  newRole = None
+  previousRole = None
+  if completion >= 20 and completion <= 50 :
+     newRole = getRole(category, 0)
+  elif completion >50 and completion <= 80:
+     newRole = getRole(category, 1)
+     previousRole = getRole(category, 0)
+  elif completion > 80 :
+     newRole = getRole(category, 2)
+     previousRole = getRole(category, 1)
+  if newRole : await assignRole(uid, newRole)
+  if previousRole : await removeRole(uid, previousRole)
+
 
 @bot.slash_command(description="Register Yourself!")
 async def register_for_thrill(interaction: Interaction):
@@ -65,7 +119,7 @@ async def challenge_start(interaction: Interaction, challengeid : str):
     status = database.startChallenge(interaction.user.id, challengeid)
     if status["started"] :
         embed = Embed(color=0x0080ff, title="Running!", description="Your challenge has started!\n"+status["notes"])
-        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
+        await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL,files=[File(file) for file in status["files"]])
     else:
         embed = Embed(color=0xe02222, title="Failure!", description="Response from backend:- \n"+status["notes"])
         await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
@@ -89,7 +143,7 @@ async def challenges_active(interaction:Interaction):
     if interaction.user.id in BANNED_USERS : 
         return await interaction.response.send_message(embed=BAN_EMBED, ephemeral=EPHEMERAL)
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=EPHEMERAL)
     activeChallenges = database.getActiveChallenges(interaction.user.id)
     if activeChallenges : 
         description = "Here you go:- \n"
@@ -143,7 +197,7 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
     if isFlagCorrect : 
         embed = Embed(color=0x0080ff, title="Congrats!!", description="Flag is correct!")
         await message.edit(embed=embed)
-
+        await checkCompletionAssignRole(interaction.user.id , database.getCategory(challengeid))
     else: 
         embed = Embed(color=0xe02222, title="Sorry!", description="Incorrect Flag, please try again!")
         await message.edit(embed=embed)
@@ -253,4 +307,7 @@ async def remove(ctx, id : str = None):
 async def on_ready():
     print(f"Logged in as: {bot.user.name}")
 
-if __name__ == "__main__" : bot.run(TOKEN)
+if __name__ == "__main__" : 
+    print(TOKEN)
+    print("RUNNING")
+    bot.run(TOKEN)
