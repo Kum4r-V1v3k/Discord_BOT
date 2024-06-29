@@ -7,6 +7,7 @@ from docker.errors import NotFound
 class dock_it():
     def __init__(self):
         self.client = docker.from_env()
+        self.containerDestruction()        
 
     def botContainersList(self):   
         totalContainers = self.client.containers.list()
@@ -57,4 +58,8 @@ class dock_it():
         except Exception :
             return None
 
-    
+    def containerDestruction(self):
+        allContainers = self.botContainersList()
+        for container in allContainers:
+            container.stop()
+            container.remove()    
