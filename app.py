@@ -1,13 +1,10 @@
 #!/usr/bin/python3
-from time import sleep
 from nextcord.ext import commands
-from nextcord import TextInputStyle
-from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents
+from nextcord import File, ButtonStyle, Embed, Interaction, SlashOption, Color, SelectOption, Intents, TextInputStyle
 from nextcord.ui import View, Button, Select, TextInput
-import nextcord
+import nextcord, os
 from database import Database
 from misc import dock_it
-import os, nextcord
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -25,8 +22,16 @@ BAN_EMBED = Embed(color=0xe22222, title="Sorry!", description="You are banned!")
 BANNED_USERS = database.bannedUsers()
 EPHEMERAL = False
 ROLES = {'crypto':['Decryptor', 'Unobfuscator', 'KnowsNothingButCrypto']}
-CONTAINERS_LIMIT = 10 
-USER_CONTAINER_LIMIT = 1
+CONTAINERS_LIMIT = 30 
+USER_CONTAINER_LIMIT = 3
+
+def toggleEphemeralMessage() -> None:
+    global EPHEMERAL 
+    EPHEMERAL = not EPHEMERAL
+    
+def updateBannedUsers() -> None: 
+    global BANNED_USERS
+    BANNED_USERS = database.bannedUsers()
 
 def getRole(category, index) -> str:
     return ROLES[category][index]
@@ -68,7 +73,7 @@ async def checkCompletionAssignRole(uid, category):
     previousRole = None
     if completion >= 20 and completion <= 50 :
         newRole = getRole(category, 0)
-    elif completion >50 and completion <= 80:
+    elif completion > 50 and completion <= 80:
         newRole = getRole(category, 1)
         previousRole = getRole(category, 0)
     elif completion > 80 :
@@ -218,10 +223,10 @@ async def submit_flag(interaction : Interaction, challengeid : str, flag : str):
 @bot.command(name="flag")
 async def flag(ctx, challengeid:int):
     if "Bot Maker" not in [role.name for role in ctx.author.roles]: return
-
+    
     flag = database.getFlag(challengeid)
     if flag is None: return "Invalid challenge id."
-    return await ctx.send("`"+flag+"`")
+    return await ctx.send("```"+flag+"```")
 
 
 @bot.group(name="set", invoke_without_command=True)
@@ -235,26 +240,25 @@ async def _set(ctx):
 @_set.command(name="ephemeral")
 async def ephemeral(ctx, action : str = None):
     if "Bot Maker" not in [ role.name for role in ctx.author.roles]: return
-    global EPHEMERAL
     if action is None:
-        EPHEMERAL = not EPHEMERAL
+        toggleEphemeralMessage()
         reply = "Ephemeral messages are now on" if EPHEMERAL else "Ephemeral messages are now off"
     else:
         if action.lower() == "on":
             if EPHEMERAL :
                 reply = "Ephemeral messages are already on!"
             else: 
+                toggleEphemeralMessage()
                 reply = "Ephemeral messages are now on!"
-                EPHEMERAL = not EPHEMERAL
         elif action.lower() == "off":
             if not EPHEMERAL:
                 reply = "Ephemeral messages are already off!"
             else:
+                toggleEphemeralMessage()
                 reply = "Ephemeral messages are now off!"
-                EPHEMERAL = not EPHEMERAL
 
         else:
-            reply = "Please send on or off as parameter."
+            reply = "Invalid argument."
 
     await ctx.send(reply)
    
@@ -292,24 +296,22 @@ async def status(ctx, username : str):
 @user.command(name="ban")
 async def ban(ctx, username:str):
     if "Bot Maker" not in [ role.name for role in ctx.author.roles]: return
-    global BANNED_USERS
     response = database.banUser(username)
-    BANNED_USERS = database.bannedUsers()
+    updateBannedUsers()
     await ctx.send(response)
 
 @user.command(name="unban")
 async def unban(ctx, username:str):
     if "Bot Maker" not in [ role.name for role in ctx.author.roles]: return
-    global BANNED_USERS
     response = database.unbanUser(username)
-    BANNED_USERS = database.bannedUsers()
+    updateBannedUsers()
     await ctx.send(response)
 
 @user.command(name="remove")
 async def remove(ctx, username:str):
     if "Bot Maker" not in [role.name for role in ctx.author.roles]: return
-    response = database.user_info(username)
-    response = database.delete_user(response["_id"])
+    user = database.user_info(username)
+    response = database.delete_user(user["_id"])
     if response == 0:
         await ctx.send("User deleted.")
     else : 
@@ -318,7 +320,8 @@ async def remove(ctx, username:str):
 
 @bot.group(name="containers",description="Manage Containers!", invoke_without_command=True)
 async def containers(ctx):
-    if "Bot Maker" not in [ role.name for role in ctx.author.roles]: return
+
+    if "Bot Maker" not in [role.name for role in ctx.author.roles] : return
     if ctx.invoked_subcommand is None:
         await ctx.send("Use $help containers")
 
@@ -327,6 +330,7 @@ async def count(ctx):
     if "Bot Maker" not in [ role.name for role in ctx.author.roles]: return
     runningContainers = len(docker.botContainersList())
     if runningContainers == 0 : await ctx.send("No containers running.")
+    elif runningContainers == 1: await ctx.send("1 container in running")
     else : await ctx.send(f"{runningContainers} container are running.") 
 
 @containers.command(name="list")
@@ -337,7 +341,7 @@ async def list(ctx, username:str=None):
     for i in getContainers:
         if len(i["active_containers"]) != 0 :
             response += f"Containers running for User:- **{i["name"]}**\n" + "\n".join(i["active_containers"].values())
-    if len(response) == 0: response = "No containers active"
+    if not response == 0: response = "No containers active"
     await ctx.send(response)
 
 @containers.command(name="remove")

@@ -3,7 +3,6 @@ import pymongo
 import os
 from misc import dock_it
 
-
 docker = dock_it()
 categories = ["crypto","forensics","rev","pwn","osint","gskills","web"]
 
@@ -18,13 +17,13 @@ class Database:
         if resetChallenges:
             self.resetChallenges()
         
-    def resetChallenges(self):
+    def resetChallenges(self) -> None:
         self.users.update_many({}, {"$set": {"active_containers":dict(), "active_challs":list()}})
 
-    def bannedUsers(self):
+    def bannedUsers(self) -> List :
         return [i["_id"] for i in list(self.users.find({"isUserBanned":True}))]
     
-    def user_info(self, username:str) :
+    def user_info(self, username:str) -> Dict :
         return self.users.find_one({"name":username})
 
     def user_exists(self, uid: int) -> int:
@@ -37,7 +36,6 @@ class Database:
         for category in categories:
             user[category] = []
         self.users.insert_one(user)
-        
         return 0
 
     def isUserBanned(self, username:str) -> bool:
@@ -79,13 +77,13 @@ class Database:
             self.users.update_one({"name":username}, {"$set":{"isUserBanned":False}})
             return f"User is no longer banned"
 
-    def allChalls(self,category):
+    def allChalls(self,category) -> Dict:
         return self.challs.find({"category":category})
     
     def getDifficulty(self,name,category) -> str:
         return self.challs.find_one({"name":name, "category":category}).get("difficulty")
         
-    def userChalls(self,uid,category):
+    def userChalls(self,uid,category) -> Optional[Dict]:
         return self.users.find_one({"_id":uid}).get(category)
 
     def getCategory(self,challengeid) -> str:
@@ -101,7 +99,7 @@ class Database:
                 status[chall["name"]] = "Not Completed"
         return None if not status else status
 
-    def get_chall_list(self, category: str) -> Dict[str, Dict[str, str]]:
+    def get_chall_list(self, category: str) -> Dict[str, List[Dict]]:
         challs = {"easy":[],"medium":[],"hard":[]}
         
         for chall in self.challs.find({"category":category}):
@@ -151,18 +149,18 @@ class Database:
             notes = "Challenge already running!"
             return {"started":started, "notes":notes}
 
-        if len(activeChallenges) >=8 : 
+        if len(activeChallenges) >= 8 :
             started = False
             notes = "Maximum number of active challenges reached."
             return {"started":started, "notes":notes}
-
-        files = []
 
         if not self.isChallengePresent(challid):
             started = False
             notes = "Invalid Challenge ID!"
 
         else:
+            
+            files = []
             chall = self.challs.find_one({"_id" : challid})
             footer = None
             if chall["category"] in ["web", "pwn"]:
@@ -174,10 +172,11 @@ class Database:
                     started = True
                     notes = open(os.path.join(chall["path"], "description.txt")).read()
                     if chall["category"] == "web":
+                        notes = notes.strip()
                         notes += "\nhttp://bondjames.sytes.net:"+self.container.labels["port"]
                     else:
-                        notes.strip()
-                        notes += f"\n`nc bondjames.sytes.net {self.container.labels['port']}`"
+                        notes = notes.strip()
+                        notes += f"\n```nc bondjames.sytes.net {self.container.labels['port']}```"
 
                     activeChallenges.append(challid)
                     self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})

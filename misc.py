@@ -5,11 +5,11 @@ from typing import *
 from docker.errors import NotFound
 
 class dock_it():
-    def __init__(self):
+    def __init__(self) -> None:
         self.client = docker.from_env()
         self.containerDestruction()        
 
-    def botContainersList(self):   
+    def botContainersList(self) -> List:
         totalContainers = self.client.containers.list()
         botContainers = []
         for container in totalContainers:
@@ -51,7 +51,7 @@ class dock_it():
         except Exception as e :
             return 3 # Unexpected Error
 
-    def getLabels(self, containerid : str) -> Dict[str, str]:
+    def getLabels(self, containerid : str) -> Optional[Dict[str, str]]:
         try:
             labels = self.client.containers.get(containerid).labels
             return labels
