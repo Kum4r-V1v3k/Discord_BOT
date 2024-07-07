@@ -118,7 +118,7 @@ async def challenge_start(interaction: Interaction, challengeid : str):
     if interaction.user.id in BANNED_USERS : 
         return await interaction.response.send_message(embed=BAN_EMBED)
 
-    await interaction.response.defer(ephemeral=EPHEMERAL)
+    await interaction.response.defer(ephemeral=EPHEMERAL) 
     if len(challengeid) != 6: 
         embed = Embed(color=0xe02222, title="Wrong...", description="Invalid challenge id provided")
         return await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)

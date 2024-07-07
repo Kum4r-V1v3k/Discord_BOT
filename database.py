@@ -8,7 +8,7 @@ categories = ["crypto","forensics","rev","pwn","osint","gskills","web"]
 
 class Database:
     def __init__(self, resetChallenges=True) -> None:
-        client = pymongo.MongoClient("mongodb://localhost:27017")
+        client = pymongo.MongoClient("mongodb://mongodb:27017")
         db = client["db"]
         self.challs = db['challs']
         self.users = db['users']
@@ -26,7 +26,7 @@ class Database:
     def user_info(self, username:str) -> Dict :
         return self.users.find_one({"name":username})
 
-    def user_exists(self, uid: int) -> int:
+    def user_exists(self, uid: int) -> bool:
         return self.users.count_documents({"_id":uid}, limit = 1)
 
     def create_user(self, uid: int, name: str) -> int:
@@ -103,7 +103,7 @@ class Database:
         challs = {"easy":[],"medium":[],"hard":[]}
         
         for chall in self.challs.find({"category":category}):
-                challs[chall["difficulty"]].append({str(chall["_id"]) : chall["name"]})
+            challs[chall["difficulty"]].append({str(chall["_id"]) : chall["name"]})
             
         return challs
 
