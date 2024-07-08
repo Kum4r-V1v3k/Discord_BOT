@@ -4,13 +4,14 @@ import os
 from misc import dock_it
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
+from config import MONGO_URI
 
 categories = ["crypto","forensics","rev","pwn","osint","gskills","web"]
 docker = dock_it()
 
 class Database:
     def __init__(self, resetChallenges=True) -> None:
-        client = pymongo.MongoClient("mongodb://localhost:27017")
+        client = pymongo.MongoClient(MONGO_URI)
         db = client["db"]
         self.challs = db["challs"]
         self.users = db["users"]
@@ -25,14 +26,14 @@ class Database:
         
     def addContainer(self, containerid, userid, challid):
         startTime = datetime.now()
-        endTime = startTime + timedelta(minutes=1)
+        endTime = startTime + timedelta(minutes=30)
         self.runningContainers[containerid] = [int(userid), challid, endTime]
 
     def containerDestroyer(self):
         updated = self.runningContainers.copy()
         for i in self.runningContainers:
 
-            if self.runningContainers[i][2] >= datetime.now():
+            if self.runningContainers[i][2] <= datetime.now():
                 userid = self.runningContainers[i][0]
                 challid = self.runningContainers[i][1]
                 del updated[i]
@@ -131,12 +132,12 @@ class Database:
 
     def getUserStatus(self, uid: int, category: str) -> Dict[str,str]:
         completed = self.users.find_one({"_id": uid})[category]
-        status = {}
+        status = {"Completed":[],"Not Completed":[]}
         for chall in self.challs.find({"category":category}, {"_id":0, "name":1}):
             if chall["name"] in completed:
-                status[chall["name"]] = "Completed"
+                status["Completed"].append(chall["name"])
             else:
-                status[chall["name"]] = "Not Completed"
+                status["Not Completed"].append(chall["name"])
         return None if not status else status
 
     def get_chall_list(self, category: str) -> Dict[str, List[Dict]]:
@@ -263,3 +264,4 @@ class Database:
             elif chall["difficulty"] == "medium": score+=2
             else : score+=3
         return score 
+

@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from database import Database
 from misc import dock_it
 from nextcord.ext.commands.errors import MissingAnyRole
+from nextcord.utils import escape_markdown
 
 runningContainers = dict()
 database = Database()
@@ -24,6 +25,7 @@ bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 def updateBannedUsers() -> None:
     global BANNED_USERS
     BANNED_USERS = database.bannedUsers()
+    print(BANNED_USERS)
 
 def toggleEphemeralMessage() -> None:
     global EPHEMERAL
@@ -81,7 +83,7 @@ async def checkCompletionAssignRole(userid:str, category:str) -> None :
         await modifyRole(userid, ROLES[category][1], action="remove")
 
 async def checkUser(interaction:Interaction) -> bool:
-    userid : str = str(interaction.user.id)
+    userid : int = interaction.user.id
     if userid in BANNED_USERS:
         await interaction.followup.send(embed=BAN_EMBED)
         return False
@@ -218,20 +220,27 @@ async def checkProgress(interaction:Interaction, category:str=CATEGORY_SELECTION
     if check is False:
         return 
 
-    progress_dict : Dict[str, str] = database.getUserStatus(uid=user.id, category=category)
+    progress_dict : Dict[str, List] = database.getUserStatus(uid=user.id, category=category)
     if not progress_dict : 
         await interaction.followup.send(embed=NO_PROGRESS_ERROR_EMBED, ephemeral=EPHEMERAL)
         return 
 
-    desc : List = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
-    desc : str = "\n".join(desc)
+    desc = ''
+    for i in progress_dict:
+        desc += '**' + i + '**' + ":\n"
+        desc += escape_markdown('\n'.join(chall for chall in progress_dict[i]))
+        desc += '\n\n'
+
+    # desc = escape_markdown(desc)
+    # desc : List = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
+    # desc : str = "\n".join(desc)
     embed : nextcord.Embed = Embed(color=0x5be61c, title=category.title(), description=desc)
     await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
 @bot.slash_command(name="submit_flag", description="I waited an eternity for this.")
 async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
  
-    await interaction.respond.defer()
+    await interaction.response.defer()
     user : nextcord.User = interaction.user 
     check : bool = await checkUser(interaction)
     if check is False:
@@ -243,13 +252,13 @@ async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
         await message.edit(embed=CHALL_NOT_FOUND_EMBED)
         return 
 
-    if not database.isChallRunning(challid=challengeid):
+    if not database.isChallRunning(uid=user.id,challid=challengeid):
         await message.edit(embed=CHALL_NOT_RUNNING_EMBED)
         return 
 
     message = await message.edit(embed=CHALL_ACTIVE_EMBED)
 
-    if database.checkFlag(uid=user.id, flag=flag):
+    if database.checkFlag(uid=user.id, challid=challengeid, flag=flag):
         await message.edit(embed=CORRECT_FLAG_EMBED)
         await checkCompletionAssignRole(userid=user.id, category=database.getChallCategory(challid=challengeid))
     else: 
@@ -399,7 +408,7 @@ async def list(ctx : commands.Context, username:str=None):
     response : str = ""
     for i in getContainers:
         if len(i["active_containers"]) == 0 : continue
-        response += f"**Containers running for {i['name']}**"+"\n"
+        response += f"**Containers running for {i['name']}**\n"
         for _, containerid in zip(i["active_containers"].keys(), i["active_containers"].values()) :
             labels = docker.getLabels(str(containerid))
             if labels is None : 
@@ -450,4 +459,5 @@ async def on_command_error(ctx, error):
         await ctx.send(embed=RESTRICTED_EMBED)
 
 if __name__ == "__main__":
+    updateBannedUsers()
     bot.run(TOKEN)
