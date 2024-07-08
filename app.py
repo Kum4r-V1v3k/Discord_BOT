@@ -399,7 +399,7 @@ async def list(ctx : commands.Context, username:str=None):
     response : str = ""
     for i in getContainers:
         if len(i["active_containers"]) == 0 : continue
-        response += f"**Containers running for {i["name"]}**\n"
+        response += f"**Containers running for {i['name']}**"+"\n"
         for _, containerid in zip(i["active_containers"].keys(), i["active_containers"].values()) :
             labels = docker.getLabels(str(containerid))
             if labels is None : 

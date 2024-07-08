@@ -2,21 +2,45 @@ from typing import Dict, List, Any, Optional
 import pymongo
 import os
 from misc import dock_it
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta
 
-docker = dock_it()
 categories = ["crypto","forensics","rev","pwn","osint","gskills","web"]
+docker = dock_it()
 
 class Database:
     def __init__(self, resetChallenges=True) -> None:
-        client = pymongo.MongoClient("mongodb://mongodb:27017")
+        client = pymongo.MongoClient("mongodb://localhost:27017")
         db = client["db"]
-        self.challs = db['challs']
-        self.users = db['users']
-        self.containers = db['containers']
+        self.challs = db["challs"]
+        self.users = db["users"]
+        self.containers = db["containers"]
         self.container = None
+        self.runningContainers = {}
+        self.scheduler = BackgroundScheduler()
+        self.scheduler.add_job(self.containerDestroyer, 'interval', minutes=1)
+        self.scheduler.start()
         if resetChallenges:
             self.resetChallenges()
         
+    def addContainer(self, containerid, userid, challid):
+        startTime = datetime.now()
+        endTime = startTime + timedelta(minutes=1)
+        self.runningContainers[containerid] = [int(userid), challid, endTime]
+
+    def containerDestroyer(self):
+        updated = self.runningContainers.copy()
+        for i in self.runningContainers:
+
+            if self.runningContainers[i][2] >= datetime.now():
+                userid = self.runningContainers[i][0]
+                challid = self.runningContainers[i][1]
+                del updated[i]
+                self.stopChallenge(str(userid), str(challid))
+                print("Destroyed container.")
+        self.runningContainers = updated.copy() 
+
+
     def resetChallenges(self) -> None:
         self.users.update_many({}, {"$set": {"active_containers":dict(), "active_challs":list()}})
 
@@ -26,11 +50,11 @@ class Database:
     def user_info(self, username:str) -> Dict :
         return self.users.find_one({"name":username})
 
-    def user_exists(self, uid: int) -> bool:
+    def isUserPresent(self, uid: str) -> int:
         return self.users.count_documents({"_id":uid}, limit = 1)
 
-    def create_user(self, uid: int, name: str) -> int:
-        if self.user_exists(uid): return -1
+    def addUser(self, uid: str, name: str) -> int:
+        if self.isUserPresent(uid): return -1
         
         user : Dict[str, Any] = {"_id": uid, "name" : name, "active_challs" : [], "active_containers" : {}, "isUserBanned":False}
         for category in categories:
@@ -42,8 +66,8 @@ class Database:
         info = self.user_info(username)
         return info["isUserBanned"] if info is not None else None
 
-    def delete_user(self, uid: int) -> int:
-        if not self.user_exists(uid) : return -1
+    def delete_user(self, uid: str) -> int:
+        if self.isUserPresent(uid) != 1 : return -1
         
         self.users.delete_one({"_id": uid})
 
@@ -77,19 +101,35 @@ class Database:
             self.users.update_one({"name":username}, {"$set":{"isUserBanned":False}})
             return f"User is no longer banned"
 
-    def allChalls(self,category) -> Dict:
-        return self.challs.find({"category":category})
+    def getChallList(self,category) -> str:
+        
+        challs = {"easy":[],"medium":[],"hard":[]}
+        
+        for chall in self.challs.find({"category":category}):
+            challs[chall["difficulty"]].append({str(chall["_id"]) : chall["name"]})
+        
+        desc = ""
+        for difficulty in challs:
+            temp = []
+            if  len(challs[difficulty]) == 0: continue
+            for challenge in challs[difficulty]:
+                temp.append(tuple(challenge.keys())[0] +"    "+tuple(challenge.values())[0])
+            desc += "\n\n"
+            desc += f"__**{difficulty.title()}**__\n- " + "\n- ".join(temp) 
+
+
+        return desc if desc else None 
     
+    def userDetails(self, uid:str) -> Dict:
+        return self.users.find_one({"_id":uid})
+
     def getDifficulty(self,name,category) -> str:
         return self.challs.find_one({"name":name, "category":category}).get("difficulty")
-        
-    def userChalls(self,uid,category) -> Optional[Dict]:
-        return self.users.find_one({"_id":uid}).get(category)
 
-    def getCategory(self,challengeid) -> str:
+    def getChallCategory(self,challengeid) -> str:
         return self.challs.find_one({"_id":challengeid}).get("category")
 
-    def get_user_status(self, uid: int, category: str) -> Dict[str,str]:
+    def getUserStatus(self, uid: int, category: str) -> Dict[str,str]:
         completed = self.users.find_one({"_id": uid})[category]
         status = {}
         for chall in self.challs.find({"category":category}, {"_id":0, "name":1}):
@@ -107,7 +147,7 @@ class Database:
             
         return challs
 
-    def check_flag(self, uid : int, challid: int, flag : str) -> bool:
+    def checkFlag(self, uid : int, challid: int, flag : str) -> bool:
         
         if (self.challs.find_one({"_id":challid})["flag"] == flag) :
             self.stopChallenge(uid, challid)
@@ -115,8 +155,8 @@ class Database:
             return True
         else : return False
 
-    def getFlag(self, challid:int) -> str:
-        flag = self.challs.find_one({"_id":str(challid)})
+    def getFlag(self, challid:str) -> str:
+        flag = self.challs.find_one({"_id":challid})
         return flag["flag"] if flag else "Not found"
 
     def updateStatus(self, uid : int, challid : int) -> None:
@@ -128,73 +168,50 @@ class Database:
         self.users.update_one({"_id" : uid}, {"$set" : {challCategory : challCompleted}})
         
 
-    def is_chall_started(self, uid: int, challid : int) -> bool:
+    def isChallRunning(self, uid: int, challid : int) -> bool:
         return challid in self.users.find_one({"_id":uid})["active_challs"]
 
-    def isChallengePresent(self, challid : int) -> bool:
+    def challExists(self, challid : int) -> bool:
         if self.challs.find_one({"_id":challid}) : return True
         else : return False
 
     def startChallenge(self, uid : int, challid : int) -> Dict :
-        
-        if not self.user_exists(uid) : 
-            started = False 
-            notes = "User not registered!"
-            return {"started":started, "notes":notes}
-        
-        activeChallenges = self.users.find_one({"_id" : uid})["active_challs"]
-
-        if challid in activeChallenges : 
-            started = False
-            notes = "Challenge already running!"
-            return {"started":started, "notes":notes}
-
-        if len(activeChallenges) >= 8 :
-            started = False
-            notes = "Maximum number of active challenges reached."
-            return {"started":started, "notes":notes}
-
-        if not self.isChallengePresent(challid):
-            started = False
-            notes = "Invalid Challenge ID!"
-
-        else:
-            
-            files = []
-            chall = self.challs.find_one({"_id" : challid})
-            footer = None
-            if chall["category"] in ["web", "pwn"]:
-                code = self.startContainer(chall, uid)
-                if code != 0 : 
-                    started = False
-                    notes = "Backend Error!"
-                else:
-                    started = True
-                    notes = open(os.path.join(chall["path"], "description.txt")).read()
-                    if chall["category"] == "web":
-                        notes = notes.strip()
-                        notes += "\nhttp://bondjames.sytes.net:"+self.container.labels["port"]
-                    else:
-                        notes = notes.strip()
-                        notes += f"\n```nc bondjames.sytes.net {self.container.labels['port']}```"
-
-                    activeChallenges.append(challid)
-                    self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
-                    footer = chall["name"]+":"+chall["_id"]
-                    filesPath = os.path.join(chall["path"], "files")
-                    for file in os.listdir(filesPath)  :
-                        files.append(os.path.join(filesPath, file))
-
-
+        activeChallenges = self.users.find_one({"_id":uid}).get("active_challs")    
+        files = []
+        chall = self.challs.find_one({"_id" : challid})
+        footer = None
+        if chall["category"] in ["web", "pwn"]:
+            code = self.startContainer(chall, uid)
+            if code != 0 : 
+                started = False
+                notes = "Backend Error!"
             else:
                 started = True
                 notes = open(os.path.join(chall["path"], "description.txt")).read()
+                if chall["category"] == "web":
+                    notes = notes.strip()
+                    notes += "\nhttp://bondjames.sytes.net:"+self.container.labels["port"]
+                else:
+                    notes = notes.strip()
+                    notes += f"\n```nc bondjames.sytes.net {self.container.labels['port']}```"
+
                 activeChallenges.append(challid)
                 self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
-                footer = "\n\n"+chall["_id"]+"\t"+chall["name"]
+                footer = chall["name"]+":"+chall["_id"]
                 filesPath = os.path.join(chall["path"], "files")
-                for file in os.listdir(filesPath) :
+                for file in os.listdir(filesPath)  :
                     files.append(os.path.join(filesPath, file))
+
+
+        else:
+            started = True
+            notes = open(os.path.join(chall["path"], "description.txt")).read()
+            activeChallenges.append(challid)
+            self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
+            footer = "\n\n"+chall["_id"]+"\t"+chall["name"]
+            filesPath = os.path.join(chall["path"], "files")
+            for file in os.listdir(filesPath) :
+                files.append(os.path.join(filesPath, file))
 
         
         return {"started":started, "notes":notes, "files":files, "footer":footer}
@@ -203,6 +220,7 @@ class Database:
         self.container = docker.run_container(uid, chall)
         if self.container is None : 
             return -1
+        self.addContainer(self.container.id, str(uid), str(chall["_id"]))
         activeContainers = self.users.find_one({"_id":uid})["active_containers"]
         activeContainers[str(chall["_id"])] = str(self.container.id)
         self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
@@ -216,20 +234,32 @@ class Database:
 
     
     def stopChallenge(self, uid : int, challid : str) -> bool:
-        chall = self.challs.find_one({"_id":challid})
         uid = int(uid)
-        if chall["category"] in ["web","pwn"] : 
-            docker.remove_container(self.users.find_one({"_id":uid})["active_containers"][challid])
+        chall = self.challs.find_one({"_id":challid})
+        if chall["category"] in ["web","pwn"] :
             activeContainers = self.users.find_one({"_id":uid})["active_containers"]
-            del activeContainers[challid]
-            self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
+            if not activeContainers.get(challid):
+                pass 
+            else :
+                docker.remove_container(activeContainers[challid])
+                del activeContainers[challid]
+                self.users.update_one({"_id":uid},{"$set":{"active_containers":activeContainers}})
         
         activeChallenges = self.users.find_one({"_id" : uid})["active_challs"]
         try:
             activeChallenges.remove(challid) 
         except Exception as e:
+            print(self.runningContainers)
             print(str(e))
        
         self.users.update_one({"_id":uid}, {"$set": {"active_challs":activeChallenges}})
         return True
 
+    def getTotalScore(self, category:str):
+        allChalls = self.challs.find({"category":category})
+        score = 0
+        for chall in allChalls :
+            if chall["difficulty"] == "easy": score+=1
+            elif chall["difficulty"] == "medium": score+=2
+            else : score+=3
+        return score 
