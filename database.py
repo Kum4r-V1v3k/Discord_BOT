@@ -110,23 +110,21 @@ class Database:
         for chall in self.challs.find({"category":category}):
             challs[chall["difficulty"]].append({str(chall["_id"]) : chall["name"]})
         
-        desc = ""
+        temp = []
         for difficulty in challs:
-            temp = []
+            
             if  len(challs[difficulty]) == 0: continue
+            temp.append(difficulty)
             for challenge in challs[difficulty]:
-                temp.append(tuple(challenge.keys())[0] +"    "+tuple(challenge.values())[0])
-            desc += "\n\n"
-            desc += f"__**{difficulty.title()}**__\n- " + "\n- ".join(temp) 
+                temp.append(list(challenge.keys())[0]+" "+list(challenge.values())[0])
 
 
-        return desc if desc else None 
-    
+        return temp if temp else None  
     def userDetails(self, uid:str) -> Dict:
         return self.users.find_one({"_id":uid})
 
-    def getChallDifficulty(self, name:str, category:str) -> str:
-        return self.challs.find_one({"name":name,"category":category}).get("difficulty")
+    def getChallDifficulty(self, challid:str, category:str) -> str:
+        return self.challs.find_one({"_id":challid,"category":category}).get("difficulty")
 
     def getChallCategory(self,challid) -> str:
         return self.challs.find_one({"_id":challid}).get("category")
@@ -142,18 +140,29 @@ class Database:
         return None if not status else status
 
     def get_chall_list(self, category: str) -> Dict[str, List[Dict]]:
+       
         challs = {"easy":[],"medium":[],"hard":[]}
         
         for chall in self.challs.find({"category":category}):
             challs[chall["difficulty"]].append({str(chall["_id"]) : chall["name"]})
-            
-        return challs
+        
 
-    def checkFlag(self, uid : str, challid: int, flag : str) -> bool:
+        temp = []
+        for difficulty in challs:
+            
+            if  len(challs[difficulty]) == 0: continue
+            temp.append(difficulty)
+            for challenge in challs[difficulty]:
+                temp.append(list(challenge.keys())[0]+"  "+list(challenge.values())[0])
+
+        return temp if temp else None
+     
+    def checkFlag(self, uid : str, challid: str, flag : str) -> bool:
         
         if (self.challs.find_one({"_id":challid})["flag"] == flag) :
             self.stopChallenge(uid, challid)
             self.updateStatus(uid, challid)
+            self.updateScore(uid, challid)
             return True
         else : return False
 
@@ -258,13 +267,20 @@ class Database:
 
     def updateScore(self, uid : str, challid : str):
         # category, difficulty = map(self.challs.find_one({"_id":challid}).get, ["category","difficulty"])
-        category = self.getChallCategory(challid)
-        difficulty = self.getChallDifficulty(challid)
+        challInfo = self.challs.find_one({"_id":challid})
+        category = challInfo.get("category")
+        difficulty = challInfo.get("difficulty")
+        name = challInfo.get("name")
+        completedChalls = self.users.find_one({"_id":uid}, {category:1}).get(category)
+        print(completedChalls)
         try:
-            self.users.update_one({"_id":uid},
+            if name not in completedChalls:
+                self.users.update_one({"_id":uid},
                               {"$inc": {"score_" + category: DIFFS.index(difficulty) + 1}})
         except Exception as e:
             print(str(e))
+        
+        print(self.users.find_one({"_id":uid}, {"score_"+category:1}))
 
     def getCategoryScore(self, uid : str, category : str):
         return self.users.find_one({"_id":uid})["score_" + category]
@@ -280,6 +296,14 @@ class Database:
         for chall in allChalls:
             score += DIFFS.index(chall["difficulty"]) + 1
         return score
+
+    def scoreboard(self, category:str) :
+        temp = self.users.find()
+        temp3 = list()
+        for i in temp:              # Do not complain that code is untidy because of 3 temp vars
+            temp2 = [str(i[f"score_{category}"]), i["name"]]
+            temp3.append(temp2)
+        return sorted(temp3)
 
     def getTotalScore(self, uid : str):
         return sum(self.getCategoryScore(uid, category) for category in CHOICES)

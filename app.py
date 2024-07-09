@@ -1,5 +1,5 @@
 import nextcord 
-from nextcord.ext import commands
+from nextcord.ext import commands, menus
 from nextcord import Intents, Interaction, Embed, File
 from config import * 
 from typing import Dict, List, Optional 
@@ -20,10 +20,34 @@ intents.presences = True
 
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
+class Pager(menus.ListPageSource):
+    
+    def __init__(self, data):
+        super().__init__(data, per_page=15)
+    
+    async def format_page(self, menu, entries):
+        desc = "```\n"
+        desc += "╔"+"═"*7+"╦"+"═"*20+"╗"
+        k=1
+        for entry in entries:
+            if entry in ["easy", "medium", "hard"]:
+                if k != 1:
+                    desc += "\n╠"+"═"*7+"╬"+"═"*20+"║"
+                
+                desc += f"\n║{entry.title()}{" "*(7-len(entry))}║{" "*20}║"
+                k = 0
+            else:
+                desc+="\n╠"+"═"*7+"╬"+"═"*20+"╣"
+                challid, name = entry.split()
+                desc += "\n║"+challid+" ║"+name+" "*(20-len(name))+"║"
+        desc += "\n╚"+"═"*7+"╩"+"═"*20+"╝"
+        desc += "\n```"
+        embed=Embed(title="Here you go!", description=desc, color=nextcord.Color.blurple())
+        return embed
+
 def updateBannedUsers() -> None:
     global BANNED_USERS
     BANNED_USERS = database.bannedUsers()
-    print(BANNED_USERS)
 
 def toggleEphemeralMessage() -> None:
     global EPHEMERAL
@@ -121,10 +145,13 @@ async def listChallenges(interaction:Interaction, category:str=CATEGORY_SELECTIO
     if check is False:
         return 
 
-    challList : str = database.getChallList(category) # challList does not mean that it will be a list lol
+    challList : List = database.getChallList(category) 
     if challList:
-        CHALL_DESC_EMBED = challEmbed(desc=challList) # Check challEmbed function in config.py to modify looks
-        await interaction.followup.send(embed=CHALL_DESC_EMBED, ephemeral=EPHEMERAL)
+        pages = menus.ButtonMenuPages(
+            source=Pager(challList)
+        )
+        await pages.start(interaction=interaction)
+
     else:
         await interaction.followup.send(embed=NO_CHALL_DESC_EMBED, ephemeral=EPHEMERAL)
 
@@ -263,19 +290,19 @@ async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
     else: 
         await message.edit(embed=INCORRECT_FLAG_EMBED)
 
-@bot.slash_command("score_board", description="Show Rankings!")
-async def score_board(interaction:Interaction, category:str):
-    # Only the logic for the scoreboard is here.
-    sortedscores = self.users.find().sort("score_" + category,-1)
-    scoreboard = ''
-    for userscore in sortedusers:
-        scoreboard += f"{userscore['name']}\n"
-        diff_score = [0]*len(DIFFS)
-        for chall in userscore[category]:
-            diff_score[DIFFS.index(database.getChallDifficulty(chall,category))] += 1
-        for i in range(len(DIFFS)):
-            scoreboard += DIFFS[i] + ": " + str(diff_score[i]) + "/" + str(self.challs.count_documents({"category":category,"difficulty":DIFFS[i]})) + "\n"
-        scoreboard += "\n"
+# @bot.slash_command("score_board", description="Show Rankings!")
+# async def score_board(interaction:Interaction, category:str):
+#     # Only the logic for the scoreboard is here.
+#     sortedscores = users.find().sort("score_" + category,-1)
+#     scoreboard = ''
+#     for userscore in sortedscores:
+#         scoreboard += f"{userscore['name']}\n"
+#         diff_score = [0]*len(DIFFS)
+#         for chall in userscore[category]:
+#             diff_score[DIFFS.index(database.getChallDifficulty(chall,category))] += 1
+#         for i in range(len(DIFFS)):
+#             scoreboard += DIFFS[i] + ": " + str(diff_score[i]) + "/" + str(challs.count_documents({"category":category,"difficulty":DIFFS[i]})) + "\n"
+#         scoreboard += "\n"
 
 @bot.command(name="flag")
 @commands.has_any_role(*ADMIN_ROLES)
@@ -293,7 +320,7 @@ async def _set(ctx):
 
 @_set.command(name="ephemeral")
 @commands.has_any_role(*ADMIN_ROLES)
-async def ephemeral(ctx, action : str = None):
+async def ephemeral(ctx, action : str | None = None):
     
     if action is None:
         toggleEphemeralMessage()
@@ -344,7 +371,7 @@ async def progress(ctx:commands.context, username:str):
 
 @user.command(name="status")
 @commands.has_any_role(*ADMIN_ROLES)
-async def status(ctx, username : str):
+async def status(ctx, username : str | None):
 
     if username is None:
         await ctx.send("Please provide a username.")
@@ -357,7 +384,7 @@ async def status(ctx, username : str):
 
 @user.command(name="ban")
 @commands.has_any_role(*ADMIN_ROLES)
-async def ban(ctx, username:str):
+async def ban(ctx, username : str | None):
 
     if username is None:
         await ctx.send("Please provide a username.")
@@ -368,7 +395,7 @@ async def ban(ctx, username:str):
 
 @user.command(name="unban")
 @commands.has_any_role(*ADMIN_ROLES)
-async def unban(ctx, username:str):
+async def unban(ctx, username: str | None):
 
     if username is None:
         await ctx.send("Please provide a username.")
@@ -461,7 +488,13 @@ async def remove(ctx, id : str = None):
             labels = container.labels
             database.stopChallenge(labels["uid"], labels["challid"])
             await ctx.send("Container stopped!")
-    
+
+@bot.slash_command(name="scoreboard", description="Check scores!", guild_ids=GID)
+async def scoreboard(interaction:Interaction, category=CATEGORY_SELECTION):
+    scores = database.scoreboard(category)
+    desc = "\n".join(i[1]+" "+i[0] for i in scores)
+    await interaction.response.send_message(embed=Embed(title="LE SALE SCOREBOARD!", description=desc))
+
 @bot.event 
 async def on_ready():
     print(f"{bot.user.name} is ready!")
