@@ -6,7 +6,7 @@ from docker.errors import NotFound
 
 class dock_it():
     def __init__(self) -> None:
-        self.client = docker.from_env()
+        self.client = docker.DockerClient(base_url='unix://var/run/docker.sock')
         self.containerDestruction()        
 
     def botContainersList(self) -> List:
@@ -32,7 +32,7 @@ class dock_it():
         labels = {"port":str(freePort), "challid":str(chall["_id"]), "uid":str(uid), "runby":"Syre"}
         image = open(os.path.join(chall["path"], "image")).read().strip()
         try:
-            container = self.client.containers.run(image, detach=True, labels=labels, ports={80:freePort})
+            container = self.client.containers.run(image, detach=True, labels=labels, ports={80:freePort}, mem_limit="128m", memswap_limit="172m", cpu_period=100000, cpu_quota=2500, auto_remove=True)
             return container
         except Exception as e:
             print(str(e))
@@ -41,8 +41,7 @@ class dock_it():
     def remove_container(self, containerid : str) -> int:
         try:
             container = self.client.containers.get(containerid)
-            container.stop()
-            container.remove()
+            container.kill()
             return 0 # Completed with no errors
         except docker.errors.NotFound as e:
             return 1 # Container not found
@@ -61,5 +60,4 @@ class dock_it():
     def containerDestruction(self):
         allContainers = self.botContainersList()
         for container in allContainers:
-            container.stop()
-            container.remove()    
+            container.kill()
