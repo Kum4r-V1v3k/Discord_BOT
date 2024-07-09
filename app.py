@@ -1,17 +1,16 @@
 import nextcord 
-from nextcord.ext import commands
+from nextcord.ext import commands, menus
+from nextcord.utils import escape_markdown
 from nextcord import Intents, Interaction, Embed, File
 from config import * 
 from typing import Dict, List, Optional 
 from database import Database
 from misc import dock_it
 from nextcord.ext.commands.errors import MissingAnyRole
-from nextcord.utils import escape_markdown
 
 runningContainers = dict()
 database = Database()
 docker = dock_it()
-
 
 intents = Intents.default()
 intents.message_content = True
@@ -20,12 +19,35 @@ intents.presences = True
 
 bot = commands.Bot(command_prefix=COMMAND_PREFIX, intents=intents)
 
+class Pager(menus.ListPageSource):
+    
+    def __init__(self, data):
+        super().__init__(data, per_page=15)
+    
+    async def format_page(self, menu, entries):
+        desc = "```\n"
+        desc += "╔"+"═"*7+"╦"+"═"*20+"╗"
+        k=1
+        for entry in entries:
+            if entry in ["easy", "medium", "hard"]:
+                k = 0
+                if entry != "easy":
+                    desc += "\n╠"+"═"*7+"╬"+"═"*20+"║"
+                
+                desc += f"\n║{entry.title()}{" "*(7-len(entry))}║{" "*20}║"
 
+            else:
+                    desc+="\n╠"+"═"*7+"╬"+"═"*20+"╣"
+                    challid, name = entry.split()
+                    desc += "\n║"+challid+" ║"+name+" "*(20-len(name))+"║"
+        desc += "\n╚"+"═"*7+"╩"+"═"*20+"╝"
+        desc += "\n```"
+        embed=Embed(title="Here you go!", description=desc, color=nextcord.Color.blurple())
+        return embed
 
 def updateBannedUsers() -> None:
     global BANNED_USERS
     BANNED_USERS = database.bannedUsers()
-    print(BANNED_USERS)
 
 def toggleEphemeralMessage() -> None:
     global EPHEMERAL
@@ -83,7 +105,7 @@ async def checkCompletionAssignRole(userid:str, category:str) -> None :
         await modifyRole(userid, ROLES[category][1], action="remove")
 
 async def checkUser(interaction:Interaction) -> bool:
-    userid : int = interaction.user.id
+    userid : str = str(interaction.user.id)
     if userid in BANNED_USERS:
         await interaction.followup.send(embed=BAN_EMBED)
         return False
@@ -123,10 +145,14 @@ async def listChallenges(interaction:Interaction, category:str=CATEGORY_SELECTIO
     if check is False:
         return 
 
-    challList : str = database.getChallList(category) # challList does not mean that it will be a list lol
+    challList : List = database.getChallList(category) # challList does not mean that it will be a list lol
     if challList:
-        CHALL_DESC_EMBED = challEmbed(desc=challList) # Check challEmbed function in config.py to modify looks
-        await interaction.followup.send(embed=CHALL_DESC_EMBED, ephemeral=EPHEMERAL)
+        pages = menus.ButtonMenuPages(
+            source=Pager(challList)
+        )
+        await pages.start(interaction=interaction)
+        # CHALL_DESC_EMBED = challEmbed(desc=challList) # Check challEmbed function in config.py to modify looks
+        # await interaction.followup.send(embed=CHALL_DESC_EMBED, ephemeral=EPHEMERAL)
     else:
         await interaction.followup.send(embed=NO_CHALL_DESC_EMBED, ephemeral=EPHEMERAL)
 
@@ -220,27 +246,20 @@ async def checkProgress(interaction:Interaction, category:str=CATEGORY_SELECTION
     if check is False:
         return 
 
-    progress_dict : Dict[str, List] = database.getUserStatus(uid=user.id, category=category)
+    progress_dict : Dict[str, str] = database.getUserStatus(uid=user.id, category=category)
     if not progress_dict : 
         await interaction.followup.send(embed=NO_PROGRESS_ERROR_EMBED, ephemeral=EPHEMERAL)
         return 
 
-    desc = ''
-    for i in progress_dict:
-        desc += '**' + i + '**' + ":\n"
-        desc += escape_markdown('\n'.join(chall for chall in progress_dict[i]))
-        desc += '\n\n'
-
-    # desc = escape_markdown(desc)
-    # desc : List = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
-    # desc : str = "\n".join(desc)
+    desc : List = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
+    desc : str = "\n".join(desc)
     embed : nextcord.Embed = Embed(color=0x5be61c, title=category.title(), description=desc)
     await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
 @bot.slash_command(name="submit_flag", description="I waited an eternity for this.")
 async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
  
-    await interaction.response.defer()
+    await interaction.respond.defer()
     user : nextcord.User = interaction.user 
     check : bool = await checkUser(interaction)
     if check is False:
@@ -252,13 +271,13 @@ async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
         await message.edit(embed=CHALL_NOT_FOUND_EMBED)
         return 
 
-    if not database.isChallRunning(uid=user.id,challid=challengeid):
+    if not database.isChallRunning(challid=challengeid):
         await message.edit(embed=CHALL_NOT_RUNNING_EMBED)
         return 
 
     message = await message.edit(embed=CHALL_ACTIVE_EMBED)
 
-    if database.checkFlag(uid=user.id, challid=challengeid, flag=flag):
+    if database.checkFlag(uid=user.id, flag=flag):
         await message.edit(embed=CORRECT_FLAG_EMBED)
         await checkCompletionAssignRole(userid=user.id, category=database.getChallCategory(challid=challengeid))
     else: 
@@ -408,7 +427,7 @@ async def list(ctx : commands.Context, username:str=None):
     response : str = ""
     for i in getContainers:
         if len(i["active_containers"]) == 0 : continue
-        response += f"**Containers running for {i['name']}**\n"
+        response += f"**Containers running for {i['name']}**"+"\n"
         for _, containerid in zip(i["active_containers"].keys(), i["active_containers"].values()) :
             labels = docker.getLabels(str(containerid))
             if labels is None : 
@@ -459,5 +478,4 @@ async def on_command_error(ctx, error):
         await ctx.send(embed=RESTRICTED_EMBED)
 
 if __name__ == "__main__":
-    updateBannedUsers()
     bot.run(TOKEN)
