@@ -106,10 +106,10 @@ async def checkCompletionAssignRole(userid:str, category:str) -> None :
 
 async def checkUser(interaction:Interaction) -> bool:
     userid : int = interaction.user.id
-    if userid in BANNED_USERS:
+    if str(userid) in BANNED_USERS:
         await interaction.followup.send(embed=BAN_EMBED)
         return False
-    if database.isUserPresent(int(userid)) != 1:
+    if database.isUserPresent(str(userid)) != 1:
         await interaction.followup.send(embed=NOT_REGISTERED_EMBED)
         return False
     return True 
@@ -284,7 +284,6 @@ async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
     message = await message.edit(embed=CHALL_ACTIVE_EMBED)
 
     if database.checkFlag(uid=user.id, challid=challengeid, flag=flag):
-        database.updateScore(uid=user.id, challid=challengeid)
         await message.edit(embed=CORRECT_FLAG_EMBED)
         await checkCompletionAssignRole(userid=user.id, category=database.getChallCategory(challid=challengeid))
     else: 
@@ -354,12 +353,13 @@ async def user(ctx:commands.context):
 
 @user.command(name="progress")
 @commands.has_any_role(*ADMIN_ROLES)
-async def progress(ctx:commands.context, username:str):
+async def progress(ctx:commands.context, user:nextcord.User | None = None):
 
-    if username is None:
-        await ctx.send("Please provide a username.")
-        return 
-    user_info = database.user_info(username)
+    if not isinstance(user, nextcord.User):
+        await ctx.send("Sunn aise use kr ke dekh:-\n$user progress @(user)")
+        return
+     
+    user_info = database.userDetails(user.id)
     if not user_info: return await ctx.send("No such user found!")
 
     desc = ""
@@ -371,12 +371,12 @@ async def progress(ctx:commands.context, username:str):
 
 @user.command(name="status")
 @commands.has_any_role(*ADMIN_ROLES)
-async def status(ctx, username : str | None):
+async def status(ctx, user : nextcord.User | None = None):
 
-    if username is None:
-        await ctx.send("Please provide a username.")
+    if not isinstance(user, nextcord.User):
+        await ctx.send("Thik se use krna sikh le:-\n$user stats @(user)")
         return 
-    response = database.isUserBanned(username)
+    response = database.isUserBanned(user.id)
     if response is None : reply = "No such user found"
     if response : reply = "User is banned"
     else : reply = "User is not banned"
@@ -384,39 +384,37 @@ async def status(ctx, username : str | None):
 
 @user.command(name="ban")
 @commands.has_any_role(*ADMIN_ROLES)
-async def ban(ctx, username : str | None):
+async def ban(ctx, user : nextcord.User | None = None):
 
-    if username is None:
-        await ctx.send("Please provide a username.")
+    if not isinstance(user, nextcord.User):
+        await ctx.send("Aise use kro:-\n$user ban @(user)") 
         return 
-    response = database.banUser(username)
+    response = database.banUser(str(user.id))
     updateBannedUsers()
     await ctx.send(response)
 
 @user.command(name="unban")
 @commands.has_any_role(*ADMIN_ROLES)
-async def unban(ctx, username: str | None):
+async def unban(ctx, user : nextcord.User | None = None):
 
-    if username is None:
-        await ctx.send("Please provide a username.")
-        return 
-    response = database.unbanUser(username)
+    if not isinstance(user, nextcord.User):
+        await ctx.send("Aise use kro:-\n$user unban @(user)")
+
+    response = database.unbanUser(user.id)
     updateBannedUsers()
     await ctx.send(response)
 
 @user.command(name="remove")
 @commands.has_any_role(*ADMIN_ROLES)
-async def remove(ctx, username:str):
+async def remove(ctx, user : nextcord.User | None = None):
 
-    
-    if username is None:
-        await ctx.send("Please provide a username.")
+    if not isinstance(user, nextcord.User):
+        await ctx.send("Aise use kro:-\n$user remove @(user)")
         return 
 
-    user : Dict = database.user_info(username)
-    await deleteAllRoles(int(user["_id"]))
+    await deleteAllRoles(user.id)
 
-    response : int = database.delete_user(user["_id"])
+    response : int = database.delete_user(str(user.id))
 
     if response == 0:
         await ctx.send("User deleted.")
@@ -437,14 +435,18 @@ async def count(ctx):
 
     runningContainers = len(docker.botContainersList())
     if runningContainers == 0 : await ctx.send("No containers running.")
-    elif runningContainers == 1: await ctx.send("1 container in running")
+    elif runningContainers == 1: await ctx.send("1 container is running")
     else : await ctx.send(f"{runningContainers} container are running.") 
 
 @containers.command(name="list")
 @commands.has_any_role(*ADMIN_ROLES)
-async def list(ctx : commands.Context, username:str=None):
+async def list(ctx : commands.Context, user:nextcord.User | None = None):
 
-    getContainers : List = database.getUserContainers(username)
+    if not isinstance(user, nextcord.User):
+        await ctx.send("Aise use kr bhai:-\n$containers list @(user)")
+        return 
+
+    getContainers : List = database.getUserContainers(user.id)
     response : str = ""
     for i in getContainers:
         if len(i["active_containers"]) == 0 : continue
@@ -464,27 +466,27 @@ async def list(ctx : commands.Context, username:str=None):
 
 @containers.command(name="remove")
 @commands.has_any_role(*ADMIN_ROLES)
-async def remove(ctx, id : str = None):
+async def remove(ctx, cid : str = None):
 
-    if not id : 
+    if not cid : 
         return await ctx.send("**Usage**\n$containers remove all/containerid")
     allContainers = docker.botContainersList()
     
     if len(allContainers) == 0:
         return await ctx.send("Nothing to remove.")
 
-    if id == "all":
+    if cid == "all":
         await ctx.send("All containers destruction is triggered!")
         for container in allContainers:
             labels = container.labels
             database.stopChallenge(labels["uid"], labels["challid"])
     else:
         containerids = [i.id for i in allContainers]
-        if id not in containerids:
+        if cid not in containerids:
             await ctx.send("No container with given id is running.")
         else:
             for container in allContainers : 
-                if container.id == id : break
+                if container.id == cid : break
             labels = container.labels
             database.stopChallenge(labels["uid"], labels["challid"])
             await ctx.send("Container stopped!")
