@@ -12,7 +12,6 @@ runningContainers = dict()
 database = Database()
 docker = dock_it()
 
-
 intents = Intents.default()
 intents.message_content = True
 intents.members = True
