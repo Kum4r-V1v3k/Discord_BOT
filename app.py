@@ -255,9 +255,6 @@ async def checkProgress(interaction:Interaction, category:str=CATEGORY_SELECTION
         desc += escape_markdown('\n'.join(chall for chall in progress_dict[i]))
         desc += '\n\n'
 
-    # desc = escape_markdown(desc)
-    # desc : List = [f"- **{i}** {progress_dict[i]}" for i in progress_dict]
-    # desc : str = "\n".join(desc)
     embed : nextcord.Embed = Embed(color=0x5be61c, title=category.title(), description=desc)
     await interaction.followup.send(embed=embed, ephemeral=EPHEMERAL)
 
@@ -287,20 +284,6 @@ async def submit_flag(interaction:Interaction, challengeid:str, flag:str):
         await checkCompletionAssignRole(userid=user.id, category=database.getChallCategory(challid=challengeid))
     else: 
         await message.edit(embed=INCORRECT_FLAG_EMBED)
-
-# @bot.slash_command("score_board", description="Show Rankings!")
-# async def score_board(interaction:Interaction, category:str):
-#     # Only the logic for the scoreboard is here.
-#     sortedscores = users.find().sort("score_" + category,-1)
-#     scoreboard = ''
-#     for userscore in sortedscores:
-#         scoreboard += f"{userscore['name']}\n"
-#         diff_score = [0]*len(DIFFS)
-#         for chall in userscore[category]:
-#             diff_score[DIFFS.index(database.getChallDifficulty(chall,category))] += 1
-#         for i in range(len(DIFFS)):
-#             scoreboard += DIFFS[i] + ": " + str(diff_score[i]) + "/" + str(challs.count_documents({"category":category,"difficulty":DIFFS[i]})) + "\n"
-#         scoreboard += "\n"
 
 @bot.command(name="flag")
 @commands.has_any_role(*ADMIN_ROLES)
