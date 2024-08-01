@@ -52,16 +52,6 @@ def toggleEphemeralMessage() -> None:
     global EPHEMERAL
     EPHEMERAL = not EPHEMERAL
 
-# def calcUserScore(userid:str, category:str) -> int :
-#     userChalls = database.userDetails(uid=userid).get(category)
-#     score = 0
-#     for chall in userChalls :
-#         difficulty = database.getDifficulty(name=chall, category=category)
-#         if difficulty == "easy": score += 1
-#         elif difficulty == "medium": score += 2
-#         else : score += 3
-#     return score 
-
 async def deleteAllRoles(userid:int) -> None:
     guild = bot.get_guild(GID[0])
     user = guild.get_member(userid)
