@@ -107,7 +107,6 @@ async def checkUser(interaction:Interaction) -> bool:
 async def ping(interaction:Interaction):
 
     await interaction.response.send_message(f"Pong! In {round(bot.latency*1000)}ms.", ephemeral=EPHEMERAL) 
-    # Copied from stackexchange
 
 @bot.slash_command(name="about", description="In case you want to know more about our lonely Syre!", guild_ids=GID)
 async def about(interaction:Interaction):
